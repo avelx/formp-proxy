@@ -101,6 +101,7 @@ class ReturnsController @Inject() (
     }
 
   def getSDLTReturns: Action[JsValue] =
+    logger.info("[ReturnsController][getSDLTReturns]::Start")
     authorise.async(parse.json) { implicit request =>
       request.body
         .validate[GetReturnRecordsRequest]

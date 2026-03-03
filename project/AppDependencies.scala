@@ -7,13 +7,16 @@ object AppDependencies {
   private val bootstrapVersion = "10.3.0"
 
   val oraVersion           = "19.3.0.0"
+  val slickVersion = "3.6.0"
 
   val compile: Seq[ModuleID] = Seq(
     "uk.gov.hmrc"             %% "bootstrap-backend-play-30"  % bootstrapVersion,
     "com.oracle.jdbc"         %  "ojdbc8"                     % oraVersion,
     "com.oracle.jdbc"         %  "orai18n"                    % oraVersion,
     "org.scala-lang"          % "scala-library"               % "2.13.17",
-    jdbc
+    jdbc,
+    "com.typesafe.slick" %% "slick"         % slickVersion,
+    "com.typesafe.slick" %% "slick-codegen" % slickVersion,
   )
 
   val test: Seq[ModuleID] = Seq(

@@ -217,7 +217,7 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
   }
 
   override def sdltGetReturns(request: GetReturnRecordsRequest): Future[SdltReturnRecordResponse] = {
-    logger.info(s"[SDLT] sdltGetReturns($request)")
+    logger.debug(s"[SDLT] sdltGetReturns($request)")
     Future {
       db.withConnection { conn =>
         val cs = conn.prepareCall(
@@ -248,10 +248,13 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
           val totalcount: Long                      = cs.getLong(13)
           val returnSummaryList: Seq[ReturnSummary] = processResultSetSeq(cs, 12, processReturnSummary)
 
-          SdltReturnRecordResponse(
+          val results = SdltReturnRecordResponse(
             returnSummaryCount = Some(totalcount.toInt), // Inform consumer that count is not returned
             returnSummaryList = returnSummaryList.toList
           )
+          logger.debug(s"[SDLT] RESULT COUNT: (${results.returnSummaryList.length})")
+          logger.debug(s"[SDLT] RESULT COUNT2: (${results.returnSummaryList})")
+          results
         } finally cs.close()
       }
     }
