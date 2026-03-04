@@ -16,12 +16,11 @@
 
 import slick.jdbc.OracleProfile
 
+import java.sql.Timestamp
 import java.time.Instant
 import scala.concurrent.Await
 import scala.language.postfixOps
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.ExecutionContext.Implicits.global
-
 
 object Tables extends demo.Tables {
   // or just use object demo.Tables, which is hard-wired to the driver stated during generation
@@ -55,37 +54,129 @@ object OracleConnect extends App {
 
   val db = Database.forURL(url, driver = "oracle.jdbc.OracleDriver")
 
-  val q = Tables.Return
+  // Transactionality is required in order for OracleDb indexes work correctly
+  val insertOrgAction = DBIO
+    .seq(
+      Tables.SdltOrganisation += SdltOrganisationRow(
+        storn = "STN001",
+        doNotDisplayWelcomePage = None,
+        isReturnUser = None,
+        agentCounter = None,
+        returnCounter = None,
+        version = None,
+        lMigrated = None,
+        createDate = java.sql.Timestamp.from(Instant.now()),
+        lastUpdateDate = java.sql.Timestamp.from(Instant.now())
+      )
+    )
+    .transactionally
 
-//  val insert = DBIO.seq(
-//    Tables.Return +=
-//      ReturnRow(
-//        221089801,"STN001",1,0,1,Some(0),Some(221099767),None,Some(221089856),None,None,None,Some(1),"STARTED",None,
-//        java.sql.Timestamp.from(Instant.now()), java.sql.Timestamp.from(Instant.now()), None
-//      )
-//  )
-  //val insert = Tables.Return
-  //'STN001', TO_DATE('01/01/2026', 'DD/MM/YYYY'), TO_DATE('01/01/2026', 'DD/MM/YYYY')
-  val insert = DBIO.seq(
-    Tables.SdltOrganisation += SdltOrganisationRow(
-      storn = "STN0011",
-      doNotDisplayWelcomePage = None, isReturnUser = None, agentCounter = None,
-      returnCounter = None, version = None, lMigrated = None, createDate = java.sql.Timestamp.from(Instant.now()),
+  val multipleReturnRows = (1 to 10)
+    .map(id =>
+      ReturnRow(
+        returnId = BigDecimal(10001 + id),
+        storn = "STN001",
+        purchaserCounter = BigDecimal(1),
+        vendorCounter = BigDecimal(1),
+        landCounter = BigDecimal(1),
+        version = None,
+        mainPurchaserId = None,
+        mainVendorId = None,
+        mainLandId = None,
+        irmarkGenerated = None,
+        landCertForEachProp = None,
+        purgeDate = None,
+        returnResourceRef = Some(BigDecimal(10001 + id)),
+        status = "ACCEPTED", // ant of these accepted for In-Progress Ret
+        lMigrated = None,
+        createDate = Timestamp(0),
+        lastUpdateDate = Timestamp(0),
+        declaration = None
+      )
+    )
+    .toList
+
+  val insertReturnAction = DBIO
+    .seq(
+      Tables.Return ++= multipleReturnRows
+    )
+    .transactionally
+
+  val multipleAgentReturns = (1 to 10).map(id =>
+    ReturnAgentRow(
+      returnAgentId = BigDecimal(30001 + id),
+      returnId = Some(BigDecimal(10001 + id)),
+      agentType = "PURCHASER",
+      name = Some("FoxAgencyy"),
+      houseNumber = Some("num 18"),
+      address1 = Some("Address Line 1"),
+      address2 = None,
+      address3 = None,
+      address4 = None,
+      postcode = Some("SE1 2QR"),
+      phone = None,
+      email = None,
+      dxAddress = None,
+      reference = Some(s"agentRef: $id"),
+      isAuthorised = None,
+      lMigrated = None,
+      createDate = java.sql.Timestamp.from(Instant.now()),
       lastUpdateDate = java.sql.Timestamp.from(Instant.now())
-      //'STN001', TO_DATE('01/01/2026', 'DD/MM/YYYY'), TO_DATE('01/01/2026',
     )
   )
+  val insertReturnAgent    = DBIO
+    .seq(
+      Tables.ReturnAgent ++=
+        multipleAgentReturns
+    )
+    .transactionally
 
+  val insertLand = DBIO
+    .seq(
+      Tables.Land += LandRow(
+        landId = BigDecimal(4000),
+        returnId = BigDecimal(10001 + 1),
+        propertyType = None,
+        interestTransferredCreated = None,
+        houseNumber = None, address1 = None,
+        address2 = None, address3 = None, address4 = None,
+        postcode = None, landArea = None, areaUnit = None,
+        localAuthorityNumber = None, mineralRights = None,
+        nlpgUprn = None, willSendPlanByPost = None,
+        titleNumber = None,
+        landResourceRef = None,
+        nextLandId = None,
+        lMigrated = None,
+        createDate = Timestamp(0),
+        lastUpdateDate = Timestamp(0),
+      )
+    )
+    .transactionally
+
+  private val combinedAction = insertOrgAction andThen
+    insertReturnAction andThen
+    insertReturnAgent andThen
+    insertLand
+
+//  val allLandQuery = Tables.Land.filter(_.landId =!= BigDecimal(12) )
+//  val deleteAllLandAction = allLandQuery.delete
+//
+//  val allReturnQuery = Tables.Return.filter(_.returnId =!= BigDecimal(12) )
+//  val deleteAllReturnsAction = allReturnQuery.delete
+//
+//  val updateAllReturns = allReturnQuery.map(_.mainLandId).update(None)
+  // val updateLand = allLandQuery.map(_.returnId).update(None)
+
+//  val tranAction = {
+//    for {
+//      _ <- .delete
+//      _ <- deleteAllReturns.delete
+//    } yield ()
+//  }.transactionally
 
   Await.result(
-    for {
-      x <- db.run(insert).map {result =>
-        println (result)
-      }
-//      x <- db.run(q.result).map {result =>
-//          println (result.mkString ("\n"))
-//      }
-    } yield x,
-    5 seconds
+    db.run(combinedAction),
+    60 seconds
   )
+
 }
