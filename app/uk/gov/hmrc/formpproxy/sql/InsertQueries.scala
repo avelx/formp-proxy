@@ -14,47 +14,22 @@
  * limitations under the License.
  */
 
-import slick.jdbc.OracleProfile
+package uk.gov.hmrc.formpproxy.sql
 
 import java.sql.Timestamp
 import java.time.Instant
 import scala.concurrent.Await
-import scala.language.postfixOps
 import scala.concurrent.duration.DurationInt
+import scala.language.postfixOps
 
-object Tables extends demo.Tables {
-  // or just use object demo.Tables, which is hard-wired to the driver stated during generation
-  override val profile: OracleProfile.type = slick.jdbc.OracleProfile
-}
+import uk.gov.hmrc.formpproxy.sql.Tables.*
+import uk.gov.hmrc.formpproxy.sql.Tables.profile.api.*
 
-import Tables.*
-import Tables.profile.api.*
+object InsertQueries {
 
-object OracleConnect extends App {
-  val url =
-    """jdbc:oracle:thin:sdlt_file_data/sdlt_file_data@
-                        ( DESCRIPTION=
-                          ( ADDRESS_LIST=
-                            (FAILOVER=ON)
-                            (LOAD_BALANCE=ON)
-                            ( ADDRESS=
-                              (PROTOCOL=TCP)
-                              (HOST=localhost)
-                              (PORT=1521)
-                            )
-                          )
-                          (CONNECT_DATA=
-                            (SERVER=DEDICATED)
-                            ("SID"="xe")
-                          )
-                          (SECURITY=
-                            (SSL_SERVER_CERT_DN="N/A")
-                          )
-                        )""" // connection info
+  val recNumber: Int = 100
 
-  val db = Database.forURL(url, driver = "oracle.jdbc.OracleDriver")
-
-  // Transactionality is required in order for OracleDb indexes work correctly
+  // ORGANISATION
   val insertOrgAction = DBIO
     .seq(
       Tables.SdltOrganisation += SdltOrganisationRow(
@@ -71,16 +46,7 @@ object OracleConnect extends App {
     )
     .transactionally
 
-  val recNumber: Int = 100
-
-  val deleteOrg = DBIO
-    .seq(
-      Tables.SdltOrganisation.filter(_.storn === "STN001").delete
-    )
-    .transactionally
-
-  // val returnsStates      = Seq("ACCEPTED", "PENDING", "STARTED", "SUBMISTION", "SUBMITTED")
-
+  // RETURNS
   val multipleReturnRows: Seq[ReturnRow] = (1 to recNumber)
     .map(id =>
       ReturnRow(
@@ -97,8 +63,7 @@ object OracleConnect extends App {
         landCertForEachProp = None,
         purgeDate = None,
         returnResourceRef = Some(BigDecimal(10001 + id)),
-        status =
-          "STARTED", 
+        status = "STARTED",
         lMigrated = None,
         createDate = Timestamp(0),
         lastUpdateDate = Timestamp(0),
@@ -113,14 +78,7 @@ object OracleConnect extends App {
     )
     .transactionally
 
-  val deleteReturns =
-    DBIO
-      .sequence(
-        (1 to recNumber)
-          .map(id => Tables.Return.filter(_.returnId === BigDecimal(10001 + id)).delete)
-      )
-      .transactionally
-
+  // AGENT_RETURNS
   val multipleAgentReturns = (1 to recNumber).map(id =>
     ReturnAgentRow(
       returnAgentId = BigDecimal(30001 + id),
@@ -144,28 +102,14 @@ object OracleConnect extends App {
     )
   )
 
-  val agentReturnsIdToDelete =
-    DBIO
-      .sequence(
-        (1 to recNumber)
-          .map(id => Tables.ReturnAgent.filter(_.returnAgentId === BigDecimal(30001 + id)).delete)
-      )
-      .transactionally
-
   val insertReturnAgent = DBIO
     .seq(
       Tables.ReturnAgent ++=
         multipleAgentReturns
     )
     .transactionally
-  
-  val deleteMultiLand = DBIO
-    .sequence(
-      (1 to recNumber)
-        .map(id => Tables.Land.filter(_.returnId === BigDecimal(10001 + id)).delete)
-    )
-    .transactionally
 
+  // LAND
   val insertMultiLand = (1 to recNumber).map(id =>
     LandRow(
       landId = BigDecimal(4000 + id),
@@ -199,6 +143,7 @@ object OracleConnect extends App {
     )
     .transactionally
 
+  // PURCHASER
   val multiplePurchaser = (1 to recNumber).map(id =>
     PurchaserRow(
       purchaserId = BigDecimal(10001 + id),
@@ -238,76 +183,4 @@ object OracleConnect extends App {
       Tables.Purchaser ++= multiplePurchaser
     )
     .transactionally
-
-  val deletePurchaser =
-    DBIO
-      .sequence(
-        (1 to recNumber)
-          .map(id => Tables.Purchaser.filter(_.returnId === BigDecimal(10001 + id)).delete)
-      )
-      .transactionally
-
-  val combinedDeletion =
-    deletePurchaser andThen deleteMultiLand andThen agentReturnsIdToDelete andThen deleteReturns andThen deleteOrg
-
-  private val combinedAction = combinedDeletion andThen
-    insertOrgAction andThen
-    insertReturnAction andThen
-    insertReturnAgent andThen
-    insertLand andThen insertPurchaser
-  
-  // Prepare Return Record to be DELETED
-  (1 to recNumber).map(id =>
-    val action = Tables.Return
-      .filter(_.returnId === BigDecimal(10001 + id))
-      .map(_.mainLandId)
-      .update(None)
-      .transactionally
-    Await.result(
-      db.run(action),
-      60 seconds
-    )
-  )
-
-  (1 to recNumber).map(id =>
-    val action = Tables.Return
-      .filter(_.returnId === BigDecimal(10001 + id))
-      .map(_.mainPurchaserId)
-      .update(None)
-      .transactionally
-    Await.result(
-      db.run(action),
-      60 seconds
-    )
-  )
-
-  Await.result(
-    db.run(combinedAction),
-    60 seconds
-  )
-
-  (1 to recNumber).map(id =>
-    val action = Tables.Return
-      .filter(_.returnId === BigDecimal(10001 + id))
-      .map(_.mainLandId)
-      .update(Some(BigDecimal(4000 + id)))
-      .transactionally
-    Await.result(
-      db.run(action),
-      60 seconds
-    )
-  )
-
-  (1 to recNumber).map(id =>
-    val action = Tables.Return
-      .filter(_.returnId === BigDecimal(10001 + id))
-      .map(_.mainPurchaserId)
-      .update(Some(BigDecimal(10001 + id)))
-      .transactionally
-    Await.result(
-      db.run(action),
-      60 seconds
-    )
-  )
-
 }

@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-package demo
+package uk.gov.hmrc.formpproxy.sql
+
 // AUTO-GENERATED Slick data model
 /** Stand-alone Slick data model for immediate use */
 object Tables extends Tables {
@@ -26,13 +27,12 @@ object Tables extends Tables {
   */
 trait Tables {
   val profile: slick.jdbc.JdbcProfile
-  import profile.api._
+  import profile.api.*
+  import slick.collection.heterogeneous.*
   import slick.model.ForeignKeyAction
-  import slick.collection.heterogeneous._
-  import slick.collection.heterogeneous.syntax._
   // NOTE: GetResult mappers for plain SQL are only generated for
   // tables where Slick knows how to map the types of all columns.
-  import slick.jdbc.{GetResult => GR}
+  import slick.jdbc.GetResult as GR
 
   /** DDL for all tables. Call .create to execute. */
   lazy val schema: profile.SchemaDescription = Array(
@@ -136,7 +136,7 @@ trait Tables {
     e3: GR[Option[scala.math.BigDecimal]],
     e4: GR[java.sql.Timestamp]
   ): GR[AgentRow] = GR { prs =>
-    import prs._
+    import prs.*
     (AgentRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -207,7 +207,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (AgentRow.apply _)
             .tupled((_1.get, _2.get, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16.get, _17.get))
@@ -360,7 +360,7 @@ trait Tables {
     e2: GR[Option[String]],
     e3: GR[java.sql.Timestamp]
   ): GR[CompanyDetailsRow] = GR { prs =>
-    import prs._
+    import prs.*
     CompanyDetailsRow(
       <<[scala.math.BigDecimal],
       <<[scala.math.BigDecimal],
@@ -614,7 +614,7 @@ trait Tables {
     e2: GR[Option[String]],
     e3: GR[java.sql.Timestamp]
   ): GR[CompanyDetailsBackupRow] = GR { prs =>
-    import prs._
+    import prs.*
     CompanyDetailsBackupRow(
       <<[scala.math.BigDecimal],
       <<[scala.math.BigDecimal],
@@ -781,7 +781,7 @@ trait Tables {
 
   /** GetResult implicit for fetching DbaLoggingRow objects using plain SQL queries */
   implicit def GetResultDbaLoggingRow(implicit e0: GR[String]): GR[DbaLoggingRow] = GR { prs =>
-    import prs._
+    import prs.*
     (DbaLoggingRow.apply _).tupled((<<[String], <<[String]))
   }
 
@@ -793,7 +793,7 @@ trait Tables {
     /** Maps whole row to an option. Useful for outer joins. */
     def ? = ((Rep.Some(procedureName), Rep.Some(credentialId))).shaped.<>(
       { r =>
-        import r._; _1.map(_ => (DbaLoggingRow.apply _).tupled((_1.get, _2.get)))
+        import r.*; _1.map(_ => (DbaLoggingRow.apply _).tupled((_1.get, _2.get)))
       },
       (_: Any) => throw new Exception("Inserting into ? projection not supported.")
     )
@@ -816,7 +816,7 @@ trait Tables {
 
   /** GetResult implicit for fetching DisadvantagedPostcodesRow objects using plain SQL queries */
   implicit def GetResultDisadvantagedPostcodesRow(implicit e0: GR[String]): GR[DisadvantagedPostcodesRow] = GR { prs =>
-    import prs._
+    import prs.*
     DisadvantagedPostcodesRow(<<[String])
   }
 
@@ -872,7 +872,7 @@ trait Tables {
     e1: GR[java.sql.Timestamp],
     e2: GR[Option[String]]
   ): GR[DmsSchemaInfoRow] = GR { prs =>
-    import prs._
+    import prs.*
     (DmsSchemaInfoRow.apply _).tupled((<<[String], <<[String], <<[String], <<[java.sql.Timestamp], <<?[String]))
   }
 
@@ -888,7 +888,7 @@ trait Tables {
       ((Rep.Some(schemaNameX), Rep.Some(releaseName), Rep.Some(schemaVersion), Rep.Some(dateOfChange), notes)).shaped
         .<>(
           { r =>
-            import r._; _1.map(_ => (DmsSchemaInfoRow.apply _).tupled((_1.get, _2.get, _3.get, _4.get, _5)))
+            import r.*; _1.map(_ => (DmsSchemaInfoRow.apply _).tupled((_1.get, _2.get, _3.get, _4.get, _5)))
           },
           (_: Any) => throw new Exception("Inserting into ? projection not supported.")
         )
@@ -927,7 +927,7 @@ trait Tables {
     e0: GR[Option[scala.math.BigDecimal]],
     e1: GR[Option[java.sql.Clob]]
   ): GR[GovtalkMessageDataRow] = GR { prs =>
-    import prs._
+    import prs.*
     (GovtalkMessageDataRow.apply _).tupled((<<?[scala.math.BigDecimal], <<?[java.sql.Clob]))
   }
 
@@ -975,7 +975,7 @@ trait Tables {
     e1: GR[Option[String]],
     e2: GR[Option[java.sql.Timestamp]]
   ): GR[GovtalkMessageLogRow] = GR { prs =>
-    import prs._
+    import prs.*
     (GovtalkMessageLogRow.apply _).tupled(
       (<<?[scala.math.BigDecimal], <<?[String], <<?[String], <<?[String], <<?[java.sql.Timestamp])
     )
@@ -1051,7 +1051,7 @@ trait Tables {
     e3: GR[java.sql.Timestamp],
     e4: GR[scala.math.BigDecimal]
   ): GR[GovtalkStatusRow] = GR { prs =>
-    import prs._
+    import prs.*
     (GovtalkStatusRow.apply _).tupled(
       (
         <<[String],
@@ -1105,7 +1105,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (GovtalkStatusRow.apply _)
             .tupled((_1.get, _2.get, _3.get, _4.get, _5, _6, _7.get, _8.get, _9.get, _10.get, _11.get))
@@ -1200,7 +1200,7 @@ trait Tables {
     e3: GR[java.sql.Timestamp],
     e4: GR[scala.math.BigDecimal]
   ): GR[GovtalkStatusBackupRow] = GR { prs =>
-    import prs._
+    import prs.*
     (GovtalkStatusBackupRow.apply _).tupled(
       (
         <<[String],
@@ -1255,7 +1255,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (GovtalkStatusBackupRow.apply _)
             .tupled((_1.get, _2.get, _3.get, _4.get, _5, _6, _7.get, _8.get, _9.get, _10.get, _11.get))
@@ -1379,7 +1379,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[LandRow] = GR { prs =>
-    import prs._
+    import prs.*
     (LandRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -1465,7 +1465,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (LandRow.apply _).tupled(
             (
@@ -1663,7 +1663,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[LandBackupRow] = GR { prs =>
-    import prs._
+    import prs.*
     (LandBackupRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -1750,7 +1750,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (LandBackupRow.apply _).tupled(
             (
@@ -2009,7 +2009,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[LeaseRow] = GR { prs =>
-    import prs._
+    import prs.*
     LeaseRow(
       <<[scala.math.BigDecimal],
       <<[scala.math.BigDecimal],
@@ -2462,7 +2462,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[LeaseBackupRow] = GR { prs =>
-    import prs._
+    import prs.*
     LeaseBackupRow(
       <<[scala.math.BigDecimal],
       <<[scala.math.BigDecimal],
@@ -2786,7 +2786,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[Option[java.sql.Timestamp]]
   ): GR[PreventMessageAuditRow] = GR { prs =>
-    import prs._
+    import prs.*
     (PreventMessageAuditRow.apply _).tupled(
       (
         <<[String],
@@ -2817,7 +2817,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._; _1.map(_ => (PreventMessageAuditRow.apply _).tupled((_1.get, _2.get, _3.get, _4.get, _5, _6)))
+        import r.*; _1.map(_ => (PreventMessageAuditRow.apply _).tupled((_1.get, _2.get, _3.get, _4.get, _5, _6)))
       },
       (_: Any) => throw new Exception("Inserting into ? projection not supported.")
     )
@@ -2946,7 +2946,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[PurchaserRow] = GR { prs =>
-    import prs._
+    import prs.*
     PurchaserRow(
       <<[scala.math.BigDecimal],
       <<[scala.math.BigDecimal],
@@ -3238,7 +3238,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[PurchaserBackupRow] = GR { prs =>
-    import prs._
+    import prs.*
     PurchaserBackupRow(
       <<[scala.math.BigDecimal],
       <<[scala.math.BigDecimal],
@@ -3453,7 +3453,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[ResidencyRow] = GR { prs =>
-    import prs._
+    import prs.*
     (ResidencyRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -3489,7 +3489,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._; _1.map(_ => (ResidencyRow.apply _).tupled((_1.get, _2.get, _3, _4, _5, _6, _7.get, _8.get)))
+        import r.*; _1.map(_ => (ResidencyRow.apply _).tupled((_1.get, _2.get, _3, _4, _5, _6, _7.get, _8.get)))
       },
       (_: Any) => throw new Exception("Inserting into ? projection not supported.")
     )
@@ -3598,7 +3598,7 @@ trait Tables {
     e4: GR[Option[java.sql.Timestamp]],
     e5: GR[java.sql.Timestamp]
   ): GR[ReturnRow] = GR { prs =>
-    import prs._
+    import prs.*
     (ReturnRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -3672,7 +3672,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (ReturnRow.apply _).tupled(
             (
@@ -3865,7 +3865,7 @@ trait Tables {
     e3: GR[Option[String]],
     e4: GR[java.sql.Timestamp]
   ): GR[ReturnAgentRow] = GR { prs =>
-    import prs._
+    import prs.*
     (ReturnAgentRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -3940,7 +3940,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (ReturnAgentRow.apply _)
             .tupled((_1.get, _2, _3.get, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17.get, _18.get))
@@ -4087,7 +4087,7 @@ trait Tables {
     e3: GR[Option[String]],
     e4: GR[java.sql.Timestamp]
   ): GR[ReturnAgentBackupRow] = GR { prs =>
-    import prs._
+    import prs.*
     (ReturnAgentBackupRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -4162,7 +4162,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (ReturnAgentBackupRow.apply _)
             .tupled((_1.get, _2, _3.get, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17.get, _18.get))
@@ -4297,7 +4297,7 @@ trait Tables {
     e4: GR[Option[java.sql.Timestamp]],
     e5: GR[java.sql.Timestamp]
   ): GR[ReturnBackupRow] = GR { prs =>
-    import prs._
+    import prs.*
     (ReturnBackupRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -4372,7 +4372,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (ReturnBackupRow.apply _).tupled(
             (
@@ -4500,7 +4500,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[SdltOrganisationRow] = GR { prs =>
-    import prs._
+    import prs.*
     (SdltOrganisationRow.apply _).tupled(
       (
         <<[String],
@@ -4548,7 +4548,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._; _1.map(_ => (SdltOrganisationRow.apply _).tupled((_1.get, _2, _3, _4, _5, _6, _7, _8.get, _9.get)))
+        import r.*; _1.map(_ => (SdltOrganisationRow.apply _).tupled((_1.get, _2, _3, _4, _5, _6, _7, _8.get, _9.get)))
       },
       (_: Any) => throw new Exception("Inserting into ? projection not supported.")
     )
@@ -4659,7 +4659,7 @@ trait Tables {
     e4: GR[Option[java.sql.Timestamp]],
     e5: GR[java.sql.Timestamp]
   ): GR[SubmissionRow] = GR { prs =>
-    import prs._
+    import prs.*
     (SubmissionRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -4740,7 +4740,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (SubmissionRow.apply _).tupled(
             (
@@ -4933,7 +4933,7 @@ trait Tables {
     e4: GR[Option[java.sql.Timestamp]],
     e5: GR[java.sql.Timestamp]
   ): GR[SubmissionBackupRow] = GR { prs =>
-    import prs._
+    import prs.*
     (SubmissionBackupRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -5014,7 +5014,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (SubmissionBackupRow.apply _).tupled(
             (
@@ -5156,7 +5156,7 @@ trait Tables {
     e3: GR[String],
     e4: GR[java.sql.Timestamp]
   ): GR[SubmissionErrorDetailRow] = GR { prs =>
-    import prs._
+    import prs.*
     (SubmissionErrorDetailRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -5199,7 +5199,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (SubmissionErrorDetailRow.apply _).tupled((_1.get, _2.get, _3, _4, _5.get, _6.get, _7, _8.get, _9.get))
         )
@@ -5299,7 +5299,7 @@ trait Tables {
     e3: GR[String],
     e4: GR[java.sql.Timestamp]
   ): GR[SubmissionErrorDetailBackupRow] = GR { prs =>
-    import prs._
+    import prs.*
     (SubmissionErrorDetailBackupRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -5343,7 +5343,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (SubmissionErrorDetailBackupRow.apply _).tupled((_1.get, _2.get, _3, _4, _5.get, _6.get, _7, _8.get, _9.get))
         )
@@ -5448,7 +5448,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[TaxCalculationRow] = GR { prs =>
-    import prs._
+    import prs.*
     (TaxCalculationRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -5523,7 +5523,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (TaxCalculationRow.apply _)
             .tupled((_1.get, _2.get, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14.get, _15.get, _16, _17, _18))
@@ -5667,7 +5667,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[TaxCalculationBackupRow] = GR { prs =>
-    import prs._
+    import prs.*
     (TaxCalculationBackupRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -5743,7 +5743,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (TaxCalculationBackupRow.apply _)
             .tupled((_1.get, _2.get, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14.get, _15.get, _16, _17, _18))
@@ -5988,7 +5988,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[TransactionRow] = GR { prs =>
-    import prs._
+    import prs.*
     TransactionRow(
       <<[scala.math.BigDecimal],
       <<[scala.math.BigDecimal],
@@ -6498,7 +6498,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[TransactionBackupRow] = GR { prs =>
-    import prs._
+    import prs.*
     TransactionBackupRow(
       <<[scala.math.BigDecimal],
       <<[scala.math.BigDecimal],
@@ -6853,7 +6853,7 @@ trait Tables {
     e1: GR[scala.math.BigDecimal],
     e2: GR[Option[java.sql.Timestamp]]
   ): GR[TreatmentGroupRow] = GR { prs =>
-    import prs._
+    import prs.*
     (TreatmentGroupRow.apply _).tupled(
       (<<[String], <<[String], <<[String], <<[scala.math.BigDecimal], <<?[java.sql.Timestamp])
     )
@@ -6869,7 +6869,7 @@ trait Tables {
       ((Rep.Some(storn), Rep.Some(groupingReference), Rep.Some(messageReference), Rep.Some(treatment), datetime)).shaped
         .<>(
           { r =>
-            import r._; _1.map(_ => (TreatmentGroupRow.apply _).tupled((_1.get, _2.get, _3.get, _4.get, _5)))
+            import r.*; _1.map(_ => (TreatmentGroupRow.apply _).tupled((_1.get, _2.get, _3.get, _4.get, _5)))
           },
           (_: Any) => throw new Exception("Inserting into ? projection not supported.")
         )
@@ -6962,7 +6962,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[VendorRow] = GR { prs =>
-    import prs._
+    import prs.*
     (VendorRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -7036,7 +7036,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (VendorRow.apply _)
             .tupled((_1.get, _2.get, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17.get, _18.get))
@@ -7185,7 +7185,7 @@ trait Tables {
     e2: GR[Option[scala.math.BigDecimal]],
     e3: GR[java.sql.Timestamp]
   ): GR[VendorBackupRow] = GR { prs =>
-    import prs._
+    import prs.*
     (VendorBackupRow.apply _).tupled(
       (
         <<[scala.math.BigDecimal],
@@ -7260,7 +7260,7 @@ trait Tables {
       )
     ).shaped.<>(
       { r =>
-        import r._;
+        import r.*;
         _1.map(_ =>
           (VendorBackupRow.apply _)
             .tupled((_1.get, _2.get, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17.get, _18.get))
