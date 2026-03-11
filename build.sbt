@@ -26,9 +26,9 @@ lazy val it = project
   .settings(DefaultBuildSettings.itSettings())
   .settings(libraryDependencies ++= AppDependencies.it)
 
-(Compile / sourceGenerators) += slick.taskValue
+//(Compile / sourceGenerators) += slick.taskValue
 
-lazy val slick = taskKey[Seq[File]]("Generate Tables.scala")
+lazy val slick = taskKey[Seq[File]]("GenerateTables.scala")
 slick := {
   val dir       = (Compile / sourceManaged).value
   val outputDir = dir / "slick"

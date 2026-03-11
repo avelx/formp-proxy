@@ -71,7 +71,7 @@ object OracleConnect extends App {
     )
     .transactionally
 
-  val recNumber : Int = 100
+  val recNumber: Int = 100
 
   val deleteOrg = DBIO
     .seq(
@@ -79,7 +79,9 @@ object OracleConnect extends App {
     )
     .transactionally
 
-  val multipleReturnRows = (1 to recNumber)
+  // val returnsStates      = Seq("ACCEPTED", "PENDING", "STARTED", "SUBMISTION", "SUBMITTED")
+
+  val multipleReturnRows: Seq[ReturnRow] = (1 to recNumber)
     .map(id =>
       ReturnRow(
         returnId = BigDecimal(10001 + id),
@@ -95,7 +97,8 @@ object OracleConnect extends App {
         landCertForEachProp = None,
         purgeDate = None,
         returnResourceRef = Some(BigDecimal(10001 + id)),
-        status = "ACCEPTED", // ant of these accepted for In-Progress Ret
+        status =
+          "STARTED", // returnsStates(Random.nextInt(returnsStates.length)), // ant of these accepted for In-Progress Ret
         lMigrated = None,
         createDate = Timestamp(0),
         lastUpdateDate = Timestamp(0),
@@ -118,7 +121,6 @@ object OracleConnect extends App {
       )
       .transactionally
 
-
   val multipleAgentReturns = (1 to recNumber).map(id =>
     ReturnAgentRow(
       returnAgentId = BigDecimal(30001 + id),
@@ -126,7 +128,7 @@ object OracleConnect extends App {
       agentType = "PURCHASER",
       name = Some("FoxAgencyy"),
       houseNumber = Some("num 18"),
-      address1 = Some("Address Line 1"),
+      address1 = Some("Address Line" + id),
       address2 = None,
       address3 = None,
       address4 = None,
@@ -157,48 +159,112 @@ object OracleConnect extends App {
     )
     .transactionally
 
-  val deleteLand = DBIO
-    .seq(
-      Tables.Land.filter(_.landId === BigDecimal(4000)).delete
+//  val deleteLand = DBIO
+//    .seq(
+//      Tables.Land.filter(_.landId === BigDecimal(4000)).delete
+//    )
+//    .transactionally
+  val deleteMultiLand = DBIO
+    .sequence(
+      (1 to recNumber)
+        .map(id => Tables.Land.filter(_.returnId === BigDecimal(10001 + id)).delete)
     )
     .transactionally
+
+  val insertMultiLand = (1 to recNumber).map(id =>
+    LandRow(
+      landId = BigDecimal(4000 + id),
+      returnId = BigDecimal(10001 + id),
+      propertyType = None,
+      interestTransferredCreated = None,
+      houseNumber = Some("houseNumber" + id), // inject House number randomisation
+      address1 = Some("Address" + id),
+      address2 = Some("Address" + id),
+      address3 = None,
+      address4 = None,
+      postcode = None,
+      landArea = None,
+      areaUnit = None,
+      localAuthorityNumber = None,
+      mineralRights = None,
+      nlpgUprn = None,
+      willSendPlanByPost = None,
+      titleNumber = None,
+      landResourceRef = None,
+      nextLandId = None,
+      lMigrated = None,
+      createDate = java.sql.Timestamp.from(Instant.now()),
+      lastUpdateDate = java.sql.Timestamp.from(Instant.now())
+    )
+  )
 
   val insertLand = DBIO
     .seq(
-      Tables.Land += LandRow(
-        landId = BigDecimal(4000),
-        returnId = BigDecimal(10001 + 1),
-        propertyType = None,
-        interestTransferredCreated = None,
-        houseNumber = None,
-        address1 = None,
-        address2 = None,
-        address3 = None,
-        address4 = None,
-        postcode = None,
-        landArea = None,
-        areaUnit = None,
-        localAuthorityNumber = None,
-        mineralRights = None,
-        nlpgUprn = None,
-        willSendPlanByPost = None,
-        titleNumber = None,
-        landResourceRef = None,
-        nextLandId = None,
-        lMigrated = None,
-        createDate = Timestamp(0),
-        lastUpdateDate = Timestamp(0)
-      )
+      Tables.Land ++= insertMultiLand
     )
     .transactionally
 
-  val combinedDeletion = deleteLand andThen agentReturnsIdToDelete andThen deleteReturns andThen deleteOrg
+  val multiplePurchaser = (1 to recNumber).map(id =>
+    PurchaserRow(
+      purchaserId = BigDecimal(10001 + id),
+      returnId = BigDecimal(10001 + id),
+      isCompany = None,
+      isTrustee = None,
+      isConnectedToVendor = None,
+      isRepresentedByAgent = None,
+      title = Some("Mr"),
+      surname = Some("surname"),
+      forename1 = Some("forename2"),
+      forename2 = None,
+      companyName = Some("companyName"),
+      houseNumber = None,
+      address1 = Some("Address 1"),
+      address2 = None,
+      address3 = None,
+      address4 = None,
+      postcode = None,
+      phone = None,
+      nino = None,
+      purchaserResourceRef = None,
+      nextPurchaserId = None,
+      lMigrated = None,
+      createDate = java.sql.Timestamp.from(Instant.now()),
+      lastUpdateDate = java.sql.Timestamp.from(Instant.now()),
+      hasNino = None,
+      dateOfBirth = None,
+      isUkCompany = None,
+      registrationNumber = None,
+      placeOfRegistration = None
+    )
+  )
+
+  val insertPurchaser = DBIO
+    .seq(
+      Tables.Purchaser ++= multiplePurchaser
+    )
+    .transactionally
+
+  val deletePurchaser =
+    DBIO
+      .sequence(
+        (1 to recNumber)
+          .map(id => Tables.Purchaser.filter(_.returnId === BigDecimal(10001 + id)).delete)
+      )
+      .transactionally
+
+  val combinedDeletion =
+    deletePurchaser andThen deleteMultiLand andThen agentReturnsIdToDelete andThen deleteReturns andThen deleteOrg
+
+  /*
+  ||' AND ret.main_land_id = land.land_id (+) '
+ || ' AND ret.main_purchaser_id = purchaser.purchaser_id (+) '
+   */
 
   private val combinedAction = combinedDeletion andThen
     insertOrgAction andThen
     insertReturnAction andThen
     insertReturnAgent andThen
-    insertLand
+    insertLand andThen insertPurchaser
 
   //  val allLandQuery = Tables.Land.filter(_.landId =!= BigDecimal(12) )
   //  val deleteAllLandAction = allLandQuery.delete
@@ -216,9 +282,33 @@ object OracleConnect extends App {
   //    } yield ()
   //  }.transactionally
 
+  (1 to recNumber).map(id =>
+    val action = Tables.Return
+      .filter(_.returnId === BigDecimal(10001 + id))
+      .map(_.mainLandId)
+      .update(None)
+      .transactionally
+    Await.result(
+      db.run(action),
+      60 seconds
+    )
+  )
+
   Await.result(
     db.run(combinedAction),
     60 seconds
+  )
+
+  (1 to recNumber).map(id =>
+    val action = Tables.Return
+      .filter(_.returnId === BigDecimal(10001 + id))
+      .map(_.mainLandId)
+      .update(Some(BigDecimal(4000 + id)))
+      .transactionally
+    Await.result(
+      db.run(action),
+      60 seconds
+    )
   )
 
 }
