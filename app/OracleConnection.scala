@@ -208,7 +208,7 @@ object OracleConnect extends App {
     PurchaserRow(
       purchaserId = BigDecimal(10001 + id),
       returnId = BigDecimal(10001 + id),
-      isCompany = None,
+      isCompany = Some("NO"),
       isTrustee = None,
       isConnectedToVendor = None,
       isRepresentedByAgent = None,
@@ -217,7 +217,7 @@ object OracleConnect extends App {
       forename1 = Some("forename2"),
       forename2 = None,
       companyName = Some("companyName"),
-      houseNumber = None,
+      houseNumber = Some("houseNumber 1"),
       address1 = Some("Address 1"),
       address2 = None,
       address3 = None,
@@ -255,11 +255,6 @@ object OracleConnect extends App {
   val combinedDeletion =
     deletePurchaser andThen deleteMultiLand andThen agentReturnsIdToDelete andThen deleteReturns andThen deleteOrg
 
-  /*
-  ||' AND ret.main_land_id = land.land_id (+) '
- || ' AND ret.main_purchaser_id = purchaser.purchaser_id (+) '
-   */
-
   private val combinedAction = combinedDeletion andThen
     insertOrgAction andThen
     insertReturnAction andThen
@@ -282,10 +277,23 @@ object OracleConnect extends App {
   //    } yield ()
   //  }.transactionally
 
+  // Prepare Return Record to be DELETED
   (1 to recNumber).map(id =>
     val action = Tables.Return
       .filter(_.returnId === BigDecimal(10001 + id))
       .map(_.mainLandId)
+      .update(None)
+      .transactionally
+    Await.result(
+      db.run(action),
+      60 seconds
+    )
+  )
+
+  (1 to recNumber).map(id =>
+    val action = Tables.Return
+      .filter(_.returnId === BigDecimal(10001 + id))
+      .map(_.mainPurchaserId)
       .update(None)
       .transactionally
     Await.result(
@@ -304,6 +312,18 @@ object OracleConnect extends App {
       .filter(_.returnId === BigDecimal(10001 + id))
       .map(_.mainLandId)
       .update(Some(BigDecimal(4000 + id)))
+      .transactionally
+    Await.result(
+      db.run(action),
+      60 seconds
+    )
+  )
+
+  (1 to recNumber).map(id =>
+    val action = Tables.Return
+      .filter(_.returnId === BigDecimal(10001 + id))
+      .map(_.mainPurchaserId)
+      .update(Some(BigDecimal(10001 + id)))
       .transactionally
     Await.result(
       db.run(action),
