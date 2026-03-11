@@ -98,7 +98,7 @@ object OracleConnect extends App {
         purgeDate = None,
         returnResourceRef = Some(BigDecimal(10001 + id)),
         status =
-          "STARTED", // returnsStates(Random.nextInt(returnsStates.length)), // ant of these accepted for In-Progress Ret
+          "STARTED", 
         lMigrated = None,
         createDate = Timestamp(0),
         lastUpdateDate = Timestamp(0),
@@ -158,12 +158,7 @@ object OracleConnect extends App {
         multipleAgentReturns
     )
     .transactionally
-
-//  val deleteLand = DBIO
-//    .seq(
-//      Tables.Land.filter(_.landId === BigDecimal(4000)).delete
-//    )
-//    .transactionally
+  
   val deleteMultiLand = DBIO
     .sequence(
       (1 to recNumber)
@@ -260,23 +255,7 @@ object OracleConnect extends App {
     insertReturnAction andThen
     insertReturnAgent andThen
     insertLand andThen insertPurchaser
-
-  //  val allLandQuery = Tables.Land.filter(_.landId =!= BigDecimal(12) )
-  //  val deleteAllLandAction = allLandQuery.delete
-  //
-  //  val allReturnQuery = Tables.Return.filter(_.returnId =!= BigDecimal(12) )
-  //  val deleteAllReturnsAction = allReturnQuery.delete
-  //
-  //  val updateAllReturns = allReturnQuery.map(_.mainLandId).update(None)
-  // val updateLand = allLandQuery.map(_.returnId).update(None)
-
-  //  val tranAction = {
-  //    for {
-  //      _ <- .delete
-  //      _ <- deleteAllReturns.delete
-  //    } yield ()
-  //  }.transactionally
-
+  
   // Prepare Return Record to be DELETED
   (1 to recNumber).map(id =>
     val action = Tables.Return
