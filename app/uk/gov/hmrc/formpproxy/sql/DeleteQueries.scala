@@ -16,14 +16,10 @@
 
 package uk.gov.hmrc.formpproxy.sql
 
-import java.sql.Timestamp
-import java.time.Instant
-import scala.concurrent.Await
-import scala.concurrent.duration.DurationInt
-import scala.language.postfixOps
-
 import uk.gov.hmrc.formpproxy.sql.Tables.*
 import uk.gov.hmrc.formpproxy.sql.Tables.profile.api.*
+
+import scala.language.postfixOps
 
 object DeleteQueries {
   private val recNumber: Int = 100
