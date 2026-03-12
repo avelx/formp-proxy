@@ -48,11 +48,11 @@ object AllTables extends Tables {
 
 object OracleConnect extends App with Logging {
 
-  implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
-
   import InsertQueries._
   import DeleteQueries._
   import UpdateQueries._
+
+  implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
   val url =
     """jdbc:oracle:thin:sdlt_file_data/sdlt_file_data@
@@ -76,22 +76,27 @@ object OracleConnect extends App with Logging {
                         )""" // connection info
   implicit val db: profile.backend.JdbcDatabaseDef = Database.forURL(url, driver = "oracle.jdbc.OracleDriver")
 
-  // val returnsStates      = Seq("ACCEPTED", "PENDING", "STARTED", "SUBMISTION", "SUBMITTED")
+  runDataLoad(recNumber = 100)
 
-  // UPDATE: drop relationship / FK restriction before hard record delete
-  updateBeforeDeletion()
+  def runDataLoad(recNumber: Int)
+                 (implicit db: profile.backend.JdbcDatabaseDef) = {
 
-  // DELETION
-  deletedRecords()
+    // val returnsStates      = Seq("ACCEPTED", "PENDING", "STARTED", "SUBMISTION", "SUBMITTED")
 
-  // INSERT
-  insertRecords()
+    // UPDATE: drop relationship / FK restriction before hard record delete
+    updateBeforeDeletion(recNumber)
 
-  // CREATE RELATIONSHIP BETWEEN TABLES
-  postInsertUpdate()
+    // DELETION
+    deletedRecords(recNumber)
 
-  
-  def updateBeforeDeletion()
+    // INSERT
+    //insertRecords(recNumber)
+
+    // CREATE RELATIONSHIP BETWEEN TABLES
+    //postInsertUpdate(recNumber)
+  }
+
+  def updateBeforeDeletion(recNumber : Int)
                           (implicit db: profile.backend.JdbcDatabaseDef): Seq[Int] = {
     val updateReturnMainLandIdAsNullFuture = Future.sequence {
       for {
@@ -110,27 +115,26 @@ object OracleConnect extends App with Logging {
     Await.result(updateReturnMainPurchaserIdAsNullFuture, 15.seconds)
   }
 
-  def deletedRecords()
+  def deletedRecords(recNumber: Int)
                     (implicit db: profile.backend.JdbcDatabaseDef) = {
-    val combinedDeletion =
-      deletePurchaser andThen deleteMultiLand andThen agentReturnsIdToDelete andThen deleteReturns andThen deleteOrg
+    val combinedDeletion = deletePurchaser(recNumber) andThen deleteMultiLand(recNumber) andThen agentReturnsIdToDelete(recNumber) andThen deleteReturns(recNumber) andThen deleteOrg
 
     logger.info("EXEC:: DeleteAll")
     Await.result(db.run(combinedDeletion), 15.seconds)
   }
 
-  def insertRecords()
+  def insertRecords(recNumber: Int)
                    (implicit db: profile.backend.JdbcDatabaseDef) = {
     val insertAllAction = insertOrgAction andThen
-      insertReturnAction andThen
-      insertReturnAgent andThen
-      insertLand andThen insertPurchaser
+      insertReturnAction(recNumber) andThen
+      insertReturnAgent(recNumber) andThen
+      insertLand(recNumber) andThen insertPurchaser(recNumber)
 
     logger.info("EXEC:: InsertAction")
     Await.result(db.run(insertAllAction), 15.seconds)
   }
 
-  def postInsertUpdate()
+  def postInsertUpdate(recNumber: Int)
                       (implicit db: profile.backend.JdbcDatabaseDef) = {
     val updateReturnMainLandIdFuture = Future.sequence {
       for {
