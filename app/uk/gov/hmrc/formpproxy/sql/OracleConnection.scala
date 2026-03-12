@@ -78,7 +78,7 @@ object OracleConnect extends App with Logging {
 
   // TODO: allocate different set of IDs per run for: Returns / Agents etc
   createInProgressReturns(recNumber = 217, storn = "STN001")
-  // createSubmittedReturns(recNumber = 187, storn = "STN001")
+  createSubmittedReturns(recNumber = 187, storn = "STN001")
 
   def createSubmittedReturns(storn: String, recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
     // UPDATE: drop relationship / FK restriction before hard record delete
