@@ -34,10 +34,9 @@ package uk.gov.hmrc.formpproxy.sql
 
 import slick.jdbc.OracleProfile
 
-import scala.concurrent.Await
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.DurationInt
 import scala.language.postfixOps
-
 import uk.gov.hmrc.formpproxy.sql.Tables.*
 import uk.gov.hmrc.formpproxy.sql.Tables.profile.api.*
 
@@ -47,6 +46,8 @@ object AllTables extends Tables {
 }
 
 object OracleConnect extends App {
+  implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
+
   import InsertQueries._
   import DeleteQueries._
 
@@ -70,8 +71,7 @@ object OracleConnect extends App {
                             (SSL_SERVER_CERT_DN="N/A")
                           )
                         )""" // connection info
-
-  val db = Database.forURL(url, driver = "oracle.jdbc.OracleDriver")
+  val db  = Database.forURL(url, driver = "oracle.jdbc.OracleDriver")
 
   // Transactionality is required in order for OracleDb indexes work correctly
   // val returnsStates      = Seq("ACCEPTED", "PENDING", "STARTED", "SUBMISTION", "SUBMITTED")
@@ -79,67 +79,102 @@ object OracleConnect extends App {
   val combinedDeletion =
     deletePurchaser andThen deleteMultiLand andThen agentReturnsIdToDelete andThen deleteReturns andThen deleteOrg
 
-  private val combinedAction = combinedDeletion andThen
-    insertOrgAction andThen
+  private val insertAllAction = insertOrgAction andThen
     insertReturnAction andThen
     insertReturnAgent andThen
     insertLand andThen insertPurchaser
 
   // PROCESSING LOGIC:
   // UPDATE RECORDS BEFORE DELETE / DELETE / INSERT
-  
-  // Prepare Return Record to be DELETED
-  (1 to recNumber).map(id =>
+
+  def updateReturnMainLandIdAsNull(id: Int) = {
+    Thread.sleep(100)
     val action = Tables.Return
       .filter(_.returnId === BigDecimal(10001 + id))
       .map(_.mainLandId)
       .update(None)
       .transactionally
-    Await.result(
-      db.run(action),
-      60 seconds
-    )
-  )
+    db.run(action)
+  }
 
-  (1 to recNumber).map(id =>
+  val updateReturnMainLandIdAsNullFuture = Future.sequence {
+    for {
+      id <- (1 to recNumber)
+    } yield updateReturnMainLandIdAsNull(id)
+  }
+  println("EXEC:: updateReturnMainLandIdAsNullFuture")
+  Await.result(updateReturnMainLandIdAsNullFuture, 60.seconds)
+
+
+  def updateReturnMainPurchaserIdAsNull(id: Int) = {
+    Thread.sleep(100)
     val action = Tables.Return
-      .filter(_.returnId === BigDecimal(10001 + id))
-      .map(_.mainPurchaserId)
-      .update(None)
-      .transactionally
-    Await.result(
-      db.run(action),
-      60 seconds
-    )
-  )
+          .filter(_.returnId === BigDecimal(10001 + id))
+          .map(_.mainPurchaserId)
+          .update(None)
+          .transactionally
+    db.run(action)
+  }
 
+  val updateReturnMainPurchaserIdAsNullFuture = Future.sequence {
+    for {
+      id <- (1 to recNumber)
+    } yield updateReturnMainPurchaserIdAsNull(id)
+  }
+  println("EXEC:: updateReturnMainPurchaserIdAsNull")
+  Await.result(updateReturnMainPurchaserIdAsNullFuture, 60.seconds)
+
+
+  // EXEC Combined Action::
+  println("EXEC:: DeleteAll")
   Await.result(
-    db.run(combinedAction),
+    db.run(combinedDeletion),
     60 seconds
   )
 
-  (1 to recNumber).map(id =>
-    val action = Tables.Return
-      .filter(_.returnId === BigDecimal(10001 + id))
-      .map(_.mainLandId)
-      .update(Some(BigDecimal(4000 + id)))
-      .transactionally
-    Await.result(
-      db.run(action),
-      60 seconds
-    )
+  // EXEC Combined Action::
+  println("EXEC:: InsertAction")
+  Await.result(
+    db.run(insertAllAction),
+    60 seconds
   )
 
-  (1 to recNumber).map(id =>
+  def updateReturnMainLandId(id: Int): Future[_] = {
+    Thread.sleep(100)
+    db.run(
+      Tables.Return
+        .filter(_.returnId === BigDecimal(10001 + id))
+        .map(_.mainLandId)
+        .update(Some(BigDecimal(4000 + id)))
+        .transactionally
+    )
+  }
+
+  val updateReturnMainLandIdFuture = Future.sequence {
+    for {
+      id <- (1 to recNumber)
+    } yield updateReturnMainLandId(id)
+  }
+  println("EXEC:: updateReturnMainLandIdFuture")
+  Await.result(updateReturnMainLandIdFuture, 60.seconds)
+
+  def updateReturnsMainPurchaserId(id: Int) = {
     val action = Tables.Return
       .filter(_.returnId === BigDecimal(10001 + id))
       .map(_.mainPurchaserId)
       .update(Some(BigDecimal(10001 + id)))
       .transactionally
-    Await.result(
-      db.run(action),
-      60 seconds
-    )
-  )
+    Thread.sleep(100)
+    db.run(action)
+  }
+
+  val updateReturnsMainPurchaserIdFuture = Future.sequence {
+    for {
+      id <- (1 to recNumber)
+    } yield updateReturnsMainPurchaserId(id)
+  }
+
+  println("EXEC:: updateReturnsMainPurchaserId")
+  Await.result(updateReturnsMainPurchaserIdFuture, 60.seconds)
 
 }
