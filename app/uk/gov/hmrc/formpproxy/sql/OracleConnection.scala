@@ -32,8 +32,8 @@ package uk.gov.hmrc.formpproxy.sql
  * limitations under the License.
  */
 
+import play.api.Logging
 import slick.jdbc.OracleProfile
-
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.DurationInt
 import scala.language.postfixOps
@@ -45,7 +45,7 @@ object AllTables extends Tables {
   override val profile: OracleProfile.type = slick.jdbc.OracleProfile
 }
 
-object OracleConnect extends App {
+object OracleConnect extends App with Logging{
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
   import InsertQueries._
@@ -102,8 +102,8 @@ object OracleConnect extends App {
       id <- (1 to recNumber)
     } yield updateReturnMainLandIdAsNull(id)
   }
-  println("EXEC:: updateReturnMainLandIdAsNullFuture")
-  Await.result(updateReturnMainLandIdAsNullFuture, 60.seconds)
+  logger.info("EXEC:: updateReturnMainLandIdAsNullFuture")
+  Await.result(updateReturnMainLandIdAsNullFuture, 61.seconds)
 
 
   def updateReturnMainPurchaserIdAsNull(id: Int) = {
@@ -121,19 +121,16 @@ object OracleConnect extends App {
       id <- (1 to recNumber)
     } yield updateReturnMainPurchaserIdAsNull(id)
   }
-  println("EXEC:: updateReturnMainPurchaserIdAsNull")
-  Await.result(updateReturnMainPurchaserIdAsNullFuture, 60.seconds)
+  logger.info("EXEC:: updateReturnMainPurchaserIdAsNull")
+  Await.result(updateReturnMainPurchaserIdAsNullFuture, 62.seconds)
 
 
   // EXEC Combined Action::
-  println("EXEC:: DeleteAll")
-  Await.result(
-    db.run(combinedDeletion),
-    60 seconds
-  )
+  logger.info("EXEC:: DeleteAll")
+  Await.result(db.run(combinedDeletion), 63.seconds)
 
   // EXEC Combined Action::
-  println("EXEC:: InsertAction")
+  logger.info("EXEC:: InsertAction")
   Await.result(
     db.run(insertAllAction),
     60 seconds
@@ -155,16 +152,16 @@ object OracleConnect extends App {
       id <- (1 to recNumber)
     } yield updateReturnMainLandId(id)
   }
-  println("EXEC:: updateReturnMainLandIdFuture")
-  Await.result(updateReturnMainLandIdFuture, 60.seconds)
+  logger.info("EXEC:: updateReturnMainLandIdFuture")
+  Await.result(updateReturnMainLandIdFuture, 102.seconds)
 
   def updateReturnsMainPurchaserId(id: Int) = {
+    Thread.sleep(100)
     val action = Tables.Return
       .filter(_.returnId === BigDecimal(10001 + id))
       .map(_.mainPurchaserId)
       .update(Some(BigDecimal(10001 + id)))
       .transactionally
-    Thread.sleep(100)
     db.run(action)
   }
 
@@ -174,7 +171,7 @@ object OracleConnect extends App {
     } yield updateReturnsMainPurchaserId(id)
   }
 
-  println("EXEC:: updateReturnsMainPurchaserId")
-  Await.result(updateReturnsMainPurchaserIdFuture, 60.seconds)
+  logger.info("EXEC:: updateReturnsMainPurchaserId")
+  Await.result(updateReturnsMainPurchaserIdFuture, 101.seconds)
 
 }
