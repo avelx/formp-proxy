@@ -27,7 +27,6 @@ import uk.gov.hmrc.formpproxy.sql.Tables.profile.api.*
 
 object InsertQueries {
 
-
   // ORGANISATION
   val insertOrgAction = DBIO
     .seq(
@@ -46,12 +45,12 @@ object InsertQueries {
     .transactionally
 
   // RETURNS
-  val multipleReturnRows = (recNumber : Int) => {
+  val multipleReturnRows = (recNumber: Int, storn: String) =>
     (1 to recNumber)
       .map(id =>
         ReturnRow(
           returnId = BigDecimal(10001 + id),
-          storn = "STN001",
+          storn = storn,
           purchaserCounter = BigDecimal(1),
           vendorCounter = BigDecimal(1),
           landCounter = BigDecimal(1),
@@ -71,18 +70,16 @@ object InsertQueries {
         )
       )
       .toList
-  }
 
-  val insertReturnAction = (recNumber : Int) => {
+  val insertReturnAction = (recNumber: Int, storn: String) =>
     DBIO
       .seq(
-        Tables.Return ++= multipleReturnRows(recNumber)
+        Tables.Return ++= multipleReturnRows(recNumber, storn)
       )
       .transactionally
-  }
 
   // AGENT_RETURNS
-  val multipleAgentReturns = (recNumber : Int) => {
+  val multipleAgentReturns = (recNumber: Int) =>
     (1 to recNumber).map(id =>
       ReturnAgentRow(
         returnAgentId = BigDecimal(30001 + id),
@@ -105,19 +102,17 @@ object InsertQueries {
         lastUpdateDate = java.sql.Timestamp.from(Instant.now())
       )
     )
-  }
 
-  val insertReturnAgent = (recNumber : Int) => {
+  val insertReturnAgent = (recNumber: Int) =>
     DBIO
       .seq(
         Tables.ReturnAgent ++=
           multipleAgentReturns(recNumber)
       )
       .transactionally
-  }
 
   // LAND
-  val insertMultiLand = (recNumber : Int) => {
+  val insertMultiLand = (recNumber: Int) =>
     (1 to recNumber).map(id =>
       LandRow(
         landId = BigDecimal(4000 + id),
@@ -144,18 +139,16 @@ object InsertQueries {
         lastUpdateDate = java.sql.Timestamp.from(Instant.now())
       )
     )
-  }
 
-  val insertLand = (recNumber : Int) => {
+  val insertLand = (recNumber: Int) =>
     DBIO
       .seq(
         Tables.Land ++= insertMultiLand(recNumber)
       )
       .transactionally
-  }
 
   // PURCHASER
-  val multiplePurchaser = (recNumber : Int) => {
+  val multiplePurchaser = (recNumber: Int) =>
     (1 to recNumber).map(id =>
       PurchaserRow(
         purchaserId = BigDecimal(10001 + id),
@@ -189,14 +182,12 @@ object InsertQueries {
         placeOfRegistration = None
       )
     )
-  }
 
-  val insertPurchaser = (recNumber : Int) => {
+  val insertPurchaser = (recNumber: Int) =>
     DBIO
       .seq(
         Tables.Purchaser ++= multiplePurchaser(recNumber)
       )
       .transactionally
-  }
 
 }

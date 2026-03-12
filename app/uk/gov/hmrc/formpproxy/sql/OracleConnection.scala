@@ -54,7 +54,7 @@ object OracleConnect extends App with Logging {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
-  val url =
+  val url                                          =
     """jdbc:oracle:thin:sdlt_file_data/sdlt_file_data@
                         ( DESCRIPTION=
                           ( ADDRESS_LIST=
@@ -76,10 +76,9 @@ object OracleConnect extends App with Logging {
                         )""" // connection info
   implicit val db: profile.backend.JdbcDatabaseDef = Database.forURL(url, driver = "oracle.jdbc.OracleDriver")
 
-  runDataLoad(recNumber = 100)
+  runDataLoad(recNumber = 167, storn = "STN001")
 
-  def runDataLoad(recNumber: Int)
-                 (implicit db: profile.backend.JdbcDatabaseDef) = {
+  def runDataLoad(storn: String, recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
 
     // val returnsStates      = Seq("ACCEPTED", "PENDING", "STARTED", "SUBMISTION", "SUBMITTED")
 
@@ -90,17 +89,17 @@ object OracleConnect extends App with Logging {
     deletedRecords(recNumber)
 
     // INSERT
-    //insertRecords(recNumber)
+    insertRecords(recNumber, storn)
 
     // CREATE RELATIONSHIP BETWEEN TABLES
-    //postInsertUpdate(recNumber)
+    postInsertUpdate(recNumber)
+
   }
 
-  def updateBeforeDeletion(recNumber : Int)
-                          (implicit db: profile.backend.JdbcDatabaseDef): Seq[Int] = {
+  def updateBeforeDeletion(recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef): Seq[Int] = {
     val updateReturnMainLandIdAsNullFuture = Future.sequence {
       for {
-        id <- (1 to recNumber)
+        id <- 1 to recNumber
       } yield updateReturnMainLandIdAsNull(id)
     }
     logger.info("EXEC:: updateReturnMainLandIdAsNullFuture")
@@ -108,25 +107,25 @@ object OracleConnect extends App with Logging {
 
     val updateReturnMainPurchaserIdAsNullFuture = Future.sequence {
       for {
-        id <- (1 to recNumber)
+        id <- 1 to recNumber
       } yield updateReturnMainPurchaserIdAsNull(id)
     }
     logger.info("EXEC:: updateReturnMainPurchaserIdAsNull")
     Await.result(updateReturnMainPurchaserIdAsNullFuture, 15.seconds)
   }
 
-  def deletedRecords(recNumber: Int)
-                    (implicit db: profile.backend.JdbcDatabaseDef) = {
-    val combinedDeletion = deletePurchaser(recNumber) andThen deleteMultiLand(recNumber) andThen agentReturnsIdToDelete(recNumber) andThen deleteReturns(recNumber) andThen deleteOrg
+  def deletedRecords(recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
+    val combinedDeletion = deletePurchaser(recNumber) andThen deleteMultiLand(recNumber) andThen agentReturnsIdToDelete(
+      recNumber
+    ) andThen deleteReturns(recNumber) andThen deleteOrg
 
     logger.info("EXEC:: DeleteAll")
     Await.result(db.run(combinedDeletion), 15.seconds)
   }
 
-  def insertRecords(recNumber: Int)
-                   (implicit db: profile.backend.JdbcDatabaseDef) = {
+  def insertRecords(recNumber: Int, storn: String)(implicit db: profile.backend.JdbcDatabaseDef) = {
     val insertAllAction = insertOrgAction andThen
-      insertReturnAction(recNumber) andThen
+      insertReturnAction(recNumber, storn) andThen
       insertReturnAgent(recNumber) andThen
       insertLand(recNumber) andThen insertPurchaser(recNumber)
 
@@ -134,11 +133,10 @@ object OracleConnect extends App with Logging {
     Await.result(db.run(insertAllAction), 15.seconds)
   }
 
-  def postInsertUpdate(recNumber: Int)
-                      (implicit db: profile.backend.JdbcDatabaseDef) = {
+  def postInsertUpdate(recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
     val updateReturnMainLandIdFuture = Future.sequence {
       for {
-        id <- (1 to recNumber)
+        id <- 1 to recNumber
       } yield updateReturnMainLandId(id)
     }
     logger.info("EXEC:: updateReturnMainLandIdFuture")
@@ -146,7 +144,7 @@ object OracleConnect extends App with Logging {
 
     val updateReturnsMainPurchaserIdFuture = Future.sequence {
       for {
-        id <- (1 to recNumber)
+        id <- 1 to recNumber
       } yield updateReturnsMainPurchaserId(id)
     }
 

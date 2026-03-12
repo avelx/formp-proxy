@@ -21,8 +21,8 @@ import uk.gov.hmrc.formpproxy.sql.Tables.profile.api.*
 import scala.language.postfixOps
 
 object DeleteQueries {
-  
-  //private val recNumber: Int = 100
+
+  // private val recNumber: Int = 100
 
   val deleteOrg = DBIO
     .seq(
@@ -30,39 +30,36 @@ object DeleteQueries {
     )
     .transactionally
 
-  val deleteReturns = (recNumber : Int) => {
+  val deleteReturns = (recNumber: Int) =>
     DBIO
       .sequence(
         (1 to recNumber)
           .map(id => Tables.Return.filter(_.returnId === BigDecimal(10001 + id)).delete)
       )
       .transactionally
-  } 
 
-  val agentReturnsIdToDelete = (recNumber : Int) => {
+  val agentReturnsIdToDelete = (recNumber: Int) =>
     DBIO
       .sequence(
         (1 to recNumber)
           .map(id => Tables.ReturnAgent.filter(_.returnAgentId === BigDecimal(30001 + id)).delete)
       )
       .transactionally
-  }
 
-  val deleteMultiLand = (recNumber : Int) => {
-    DBIO.sequence(
+  val deleteMultiLand = (recNumber: Int) =>
+    DBIO
+      .sequence(
         (1 to recNumber)
           .map(id => Tables.Land.filter(_.returnId === BigDecimal(10001 + id)).delete)
       )
       .transactionally
-  }
 
-  val deletePurchaser = (recNumber : Int) => {
+  val deletePurchaser = (recNumber: Int) =>
     DBIO
       .sequence(
         (1 to recNumber)
           .map(id => Tables.Purchaser.filter(_.returnId === BigDecimal(10001 + id)).delete)
       )
       .transactionally
-  }
 
 }
