@@ -45,7 +45,7 @@ object InsertQueries {
     .transactionally
 
   // RETURNS
-  val multipleReturnRows = (recNumber: Int, storn: String) =>
+  val multipleReturnRows = (recNumber: Int, storn: String, returnType: ReturnType) =>
     (1 to recNumber)
       .map(id =>
         ReturnRow(
@@ -62,7 +62,14 @@ object InsertQueries {
           landCertForEachProp = None,
           purgeDate = None,
           returnResourceRef = Some(BigDecimal(10001 + id)),
-          status = "STARTED",
+          status = returnType match {
+            case InProgressReturns =>
+              "STARTED"
+            case SubmissionReturns =>
+              "SUBMITTED"
+            case _                 =>
+              "STARTED"
+          },
           lMigrated = None,
           createDate = Timestamp(0),
           lastUpdateDate = Timestamp(0),
@@ -71,10 +78,10 @@ object InsertQueries {
       )
       .toList
 
-  val insertReturnAction = (recNumber: Int, storn: String) =>
+  val insertReturnAction = (recNumber: Int, storn: String, returnType: ReturnType) =>
     DBIO
       .seq(
-        Tables.Return ++= multipleReturnRows(recNumber, storn)
+        Tables.Return ++= multipleReturnRows(recNumber, storn, returnType)
       )
       .transactionally
 
@@ -187,6 +194,40 @@ object InsertQueries {
     DBIO
       .seq(
         Tables.Purchaser ++= multiplePurchaser(recNumber)
+      )
+      .transactionally
+
+  // SUBMITTION
+  val insertMultiSubmittion = (recNumber: Int, storn: String) =>
+    (1 to recNumber).map(id =>
+      SubmissionRow(
+        submissionId = BigDecimal(900 + id),
+        returnId = BigDecimal(10001 + id),
+        storn = storn,
+        submissionStatus = None,
+        govtalkMessageClass = None,
+        utrn = None,
+        irmarkReceived = None,
+        submissionReceipt = None,
+        govtalkErrorCode = None,
+        govtalkErrorType = None,
+        govtalkErrorMessage = None,
+        numPolls = None,
+        acceptedDate = None,
+        submittedDate = None,
+        email = None,
+        lMigrated = None,
+        submissionRequestDate = None,
+        createDate = java.sql.Timestamp.from(Instant.now()),
+        lastUpdateDate = java.sql.Timestamp.from(Instant.now()),
+        irMarkSent = None
+      )
+    )
+
+  val insertSubmittion = (recNumber: Int, storn: String) =>
+    DBIO
+      .seq(
+        Tables.Submission ++= insertMultiSubmittion(recNumber, storn)
       )
       .transactionally
 

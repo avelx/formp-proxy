@@ -62,4 +62,12 @@ object DeleteQueries {
       )
       .transactionally
 
+  val deleteSubmitted = (recNumber: Int) =>
+    DBIO
+      .sequence(
+        (1 to recNumber)
+          .map(id => Tables.Submission.filter(_.returnId === BigDecimal(10001 + id)).delete)
+      )
+      .transactionally
+
 }

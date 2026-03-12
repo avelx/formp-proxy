@@ -76,9 +76,27 @@ object OracleConnect extends App with Logging {
                         )""" // connection info
   implicit val db: profile.backend.JdbcDatabaseDef = Database.forURL(url, driver = "oracle.jdbc.OracleDriver")
 
-  runDataLoad(recNumber = 167, storn = "STN001")
+  // TODO: allocate different set of IDs per run for: Returns / Agents etc
+  // createInProgressReturns(recNumber = 167, storn = "STN001")
 
-  def runDataLoad(storn: String, recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
+  createSubmittedReturns(recNumber = 167, storn = "STN001")
+
+  def createSubmittedReturns(storn: String, recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
+    // UPDATE: drop relationship / FK restriction before hard record delete
+    updateBeforeDeletion(recNumber)
+
+    // DELETION
+    deletedRecords(recNumber, SubmissionReturns)
+
+    // INSERT
+    insertRecords(recNumber, storn, SubmissionReturns)
+
+    // CREATE RELATIONSHIP BETWEEN TABLES
+    postInsertUpdate(recNumber)
+
+  }
+
+  def createInProgressReturns(storn: String, recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
 
     // val returnsStates      = Seq("ACCEPTED", "PENDING", "STARTED", "SUBMISTION", "SUBMITTED")
 
@@ -86,10 +104,10 @@ object OracleConnect extends App with Logging {
     updateBeforeDeletion(recNumber)
 
     // DELETION
-    deletedRecords(recNumber)
+    deletedRecords(recNumber, InProgressReturns)
 
     // INSERT
-    insertRecords(recNumber, storn)
+    insertRecords(recNumber, storn, InProgressReturns)
 
     // CREATE RELATIONSHIP BETWEEN TABLES
     postInsertUpdate(recNumber)
@@ -114,24 +132,58 @@ object OracleConnect extends App with Logging {
     Await.result(updateReturnMainPurchaserIdAsNullFuture, 15.seconds)
   }
 
-  def deletedRecords(recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
-    val combinedDeletion = deletePurchaser(recNumber) andThen deleteMultiLand(recNumber) andThen agentReturnsIdToDelete(
-      recNumber
-    ) andThen deleteReturns(recNumber) andThen deleteOrg
+  def deletedRecords(recNumber: Int, returnType: ReturnType)(implicit db: profile.backend.JdbcDatabaseDef) =
+    returnType match {
+      case InProgressReturns =>
+        val combinedDeletion = deletePurchaser(recNumber) andThen
+          deleteMultiLand(recNumber) andThen
+          agentReturnsIdToDelete(recNumber) andThen
+          deleteReturns(recNumber) andThen deleteOrg
 
-    logger.info("EXEC:: DeleteAll")
-    Await.result(db.run(combinedDeletion), 15.seconds)
-  }
+        logger.info(s"EXEC:: DeleteAll: $returnType")
+        Await.result(db.run(combinedDeletion), 15.seconds)
 
-  def insertRecords(recNumber: Int, storn: String)(implicit db: profile.backend.JdbcDatabaseDef) = {
-    val insertAllAction = insertOrgAction andThen
-      insertReturnAction(recNumber, storn) andThen
-      insertReturnAgent(recNumber) andThen
-      insertLand(recNumber) andThen insertPurchaser(recNumber)
+      case SubmissionReturns =>
+        val combinedDeletion = deleteSubmitted(recNumber) andThen deletePurchaser(recNumber) andThen
+          deleteMultiLand(recNumber) andThen agentReturnsIdToDelete(recNumber) andThen
+          deleteReturns(recNumber) andThen
+          deleteOrg
 
-    logger.info("EXEC:: InsertAction")
-    Await.result(db.run(insertAllAction), 15.seconds)
-  }
+        logger.info(s"EXEC:: DeleteAll: $returnType")
+        Await.result(db.run(combinedDeletion), 15.seconds)
+    }
+
+  def insertRecords(recNumber: Int, storn: String, returnType: ReturnType)(implicit
+    db: profile.backend.JdbcDatabaseDef
+  ): Unit =
+    returnType match {
+      case InProgressReturns =>
+        val insertAllAction = insertOrgAction andThen
+          insertReturnAction(recNumber, storn, returnType) andThen
+          insertReturnAgent(recNumber) andThen
+          insertLand(recNumber) andThen insertPurchaser(recNumber)
+
+        logger.info(s"EXEC:: InsertAction: $returnType")
+        Await.result(db.run(insertAllAction), 15.seconds)
+      case SubmissionReturns =>
+        val insertAllAction = insertOrgAction andThen
+          insertReturnAction(recNumber, storn, returnType) andThen
+          insertReturnAgent(recNumber) andThen
+          insertLand(recNumber) andThen insertPurchaser(recNumber) andThen
+          insertSubmittion(recNumber, storn)
+
+        logger.info(s"EXEC:: InsertAction: $returnType")
+        Await.result(db.run(insertAllAction), 15.seconds)
+      case _                 =>
+        logger.info(s"EXEC:: InsertAction: EMPTY RUN")
+    }
+//    val insertAllAction = insertOrgAction andThen
+//      insertReturnAction(recNumber, storn) andThen
+//      insertReturnAgent(recNumber) andThen
+//      insertLand(recNumber) andThen insertPurchaser(recNumber)
+//
+//    logger.info("EXEC:: InsertAction")
+//    Await.result(db.run(insertAllAction), 15.seconds)
 
   def postInsertUpdate(recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
     val updateReturnMainLandIdFuture = Future.sequence {
