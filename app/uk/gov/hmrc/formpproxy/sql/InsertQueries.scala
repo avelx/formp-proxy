@@ -16,12 +16,13 @@
 
 package uk.gov.hmrc.formpproxy.sql
 
+import uk.gov.hmrc.formpproxy.sql.ReturnType._
+
 import java.sql.Timestamp
 import java.time.Instant
 import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
 import scala.language.postfixOps
-
 import uk.gov.hmrc.formpproxy.sql.Tables.*
 import uk.gov.hmrc.formpproxy.sql.Tables.profile.api.*
 
@@ -49,7 +50,7 @@ object InsertQueries {
     (1 to recNumber)
       .map(id =>
         ReturnRow(
-          returnId = BigDecimal(10001 + id),
+          returnId = BigDecimal(getReturnIdRangeStart(returnType) + id),
           storn = storn,
           purchaserCounter = BigDecimal(1),
           vendorCounter = BigDecimal(1),
@@ -61,7 +62,7 @@ object InsertQueries {
           irmarkGenerated = None,
           landCertForEachProp = None,
           purgeDate = None,
-          returnResourceRef = Some(BigDecimal(10001 + id)),
+          returnResourceRef = Some(BigDecimal(getReturnIdRangeStart(returnType) + id)),
           status = returnType match {
             case InProgressReturns =>
               "STARTED"
@@ -86,11 +87,11 @@ object InsertQueries {
       .transactionally
 
   // AGENT_RETURNS
-  val multipleAgentReturns = (recNumber: Int) =>
+  val multipleAgentReturns = (recNumber: Int, returnType: ReturnType) =>
     (1 to recNumber).map(id =>
       ReturnAgentRow(
-        returnAgentId = BigDecimal(30001 + id),
-        returnId = Some(BigDecimal(10001 + id)),
+        returnAgentId = BigDecimal(getReturnAgentIdRangeStart(returnType) + id),
+        returnId = Some(BigDecimal(getReturnIdRangeStart(returnType) + id)),
         agentType = "PURCHASER",
         name = Some("FoxAgencyy"),
         houseNumber = Some("num 18"),
@@ -110,20 +111,20 @@ object InsertQueries {
       )
     )
 
-  val insertReturnAgent = (recNumber: Int) =>
+  val insertReturnAgent = (recNumber: Int, returnType: ReturnType) =>
     DBIO
       .seq(
         Tables.ReturnAgent ++=
-          multipleAgentReturns(recNumber)
+          multipleAgentReturns(recNumber, returnType)
       )
       .transactionally
 
   // LAND
-  val insertMultiLand = (recNumber: Int) =>
+  val insertMultiLand = (recNumber: Int, returnType: ReturnType) =>
     (1 to recNumber).map(id =>
       LandRow(
-        landId = BigDecimal(4000 + id),
-        returnId = BigDecimal(10001 + id),
+        landId = BigDecimal(getLandStart(returnType) + id),
+        returnId = BigDecimal(getReturnIdRangeStart(returnType) + id),
         propertyType = None,
         interestTransferredCreated = None,
         houseNumber = Some("houseNumber" + id), // inject House number randomisation
@@ -147,19 +148,19 @@ object InsertQueries {
       )
     )
 
-  val insertLand = (recNumber: Int) =>
+  val insertLand = (recNumber: Int, returnType: ReturnType) =>
     DBIO
       .seq(
-        Tables.Land ++= insertMultiLand(recNumber)
+        Tables.Land ++= insertMultiLand(recNumber, returnType)
       )
       .transactionally
 
   // PURCHASER
-  val multiplePurchaser = (recNumber: Int) =>
+  val multiplePurchaser = (recNumber: Int, returnType: ReturnType) =>
     (1 to recNumber).map(id =>
       PurchaserRow(
-        purchaserId = BigDecimal(10001 + id),
-        returnId = BigDecimal(10001 + id),
+        purchaserId = BigDecimal(getPurchaserStart(returnType) + id),
+        returnId = BigDecimal(getReturnIdRangeStart(returnType) + id),
         isCompany = Some("NO"),
         isTrustee = None,
         isConnectedToVendor = None,
@@ -190,19 +191,19 @@ object InsertQueries {
       )
     )
 
-  val insertPurchaser = (recNumber: Int) =>
+  val insertPurchaser = (recNumber: Int, returnType: ReturnType) =>
     DBIO
       .seq(
-        Tables.Purchaser ++= multiplePurchaser(recNumber)
+        Tables.Purchaser ++= multiplePurchaser(recNumber, returnType)
       )
       .transactionally
 
   // SUBMITTION
-  val insertMultiSubmittion = (recNumber: Int, storn: String) =>
+  val insertMultiSubmittion = (recNumber: Int, storn: String, returnType: ReturnType) =>
     (1 to recNumber).map(id =>
       SubmissionRow(
-        submissionId = BigDecimal(900 + id),
-        returnId = BigDecimal(10001 + id),
+        submissionId = BigDecimal(getSubmittionStart(returnType) + id),
+        returnId = BigDecimal(getReturnIdRangeStart(returnType) + id),
         storn = storn,
         submissionStatus = None,
         govtalkMessageClass = None,
@@ -224,10 +225,10 @@ object InsertQueries {
       )
     )
 
-  val insertSubmittion = (recNumber: Int, storn: String) =>
+  val insertSubmittion = (recNumber: Int, storn: String, returnType: ReturnType) =>
     DBIO
       .seq(
-        Tables.Submission ++= insertMultiSubmittion(recNumber, storn)
+        Tables.Submission ++= insertMultiSubmittion(recNumber, storn, returnType)
       )
       .transactionally
 

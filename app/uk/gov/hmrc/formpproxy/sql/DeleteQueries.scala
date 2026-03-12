@@ -16,8 +16,10 @@
 
 package uk.gov.hmrc.formpproxy.sql
 
+import uk.gov.hmrc.formpproxy.sql.ReturnType.{getReturnAgentIdRangeStart, getReturnIdRangeStart}
 import uk.gov.hmrc.formpproxy.sql.Tables.*
 import uk.gov.hmrc.formpproxy.sql.Tables.profile.api.*
+
 import scala.language.postfixOps
 
 object DeleteQueries {
@@ -30,43 +32,47 @@ object DeleteQueries {
     )
     .transactionally
 
-  val deleteReturns = (recNumber: Int) =>
+  val deleteReturns = (recNumber: Int, returnType: ReturnType) =>
     DBIO
       .sequence(
         (1 to recNumber)
-          .map(id => Tables.Return.filter(_.returnId === BigDecimal(10001 + id)).delete)
+          .map(id => Tables.Return.filter(_.returnId === BigDecimal(getReturnIdRangeStart(returnType) + id)).delete)
       )
       .transactionally
 
-  val agentReturnsIdToDelete = (recNumber: Int) =>
+  val agentReturnsIdToDelete = (recNumber: Int, returnType: ReturnType) =>
     DBIO
       .sequence(
         (1 to recNumber)
-          .map(id => Tables.ReturnAgent.filter(_.returnAgentId === BigDecimal(30001 + id)).delete)
+          .map(id =>
+            Tables.ReturnAgent
+              .filter(_.returnAgentId === BigDecimal(getReturnAgentIdRangeStart(returnType) + id))
+              .delete
+          )
       )
       .transactionally
 
-  val deleteMultiLand = (recNumber: Int) =>
+  val deleteMultiLand = (recNumber: Int, returnType: ReturnType) =>
     DBIO
       .sequence(
         (1 to recNumber)
-          .map(id => Tables.Land.filter(_.returnId === BigDecimal(10001 + id)).delete)
+          .map(id => Tables.Land.filter(_.returnId === BigDecimal(getReturnIdRangeStart(returnType) + id)).delete)
       )
       .transactionally
 
-  val deletePurchaser = (recNumber: Int) =>
+  val deletePurchaser = (recNumber: Int, returnType: ReturnType) =>
     DBIO
       .sequence(
         (1 to recNumber)
-          .map(id => Tables.Purchaser.filter(_.returnId === BigDecimal(10001 + id)).delete)
+          .map(id => Tables.Purchaser.filter(_.returnId === BigDecimal(getReturnIdRangeStart(returnType) + id)).delete)
       )
       .transactionally
 
-  val deleteSubmitted = (recNumber: Int) =>
+  val deleteSubmitted = (recNumber: Int, returnType: ReturnType) =>
     DBIO
       .sequence(
         (1 to recNumber)
-          .map(id => Tables.Submission.filter(_.returnId === BigDecimal(10001 + id)).delete)
+          .map(id => Tables.Submission.filter(_.returnId === BigDecimal(getReturnIdRangeStart(returnType) + id)).delete)
       )
       .transactionally
 
