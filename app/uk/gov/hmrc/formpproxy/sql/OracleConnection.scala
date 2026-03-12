@@ -85,6 +85,9 @@ object OracleConnect extends App {
     insertReturnAgent andThen
     insertLand andThen insertPurchaser
 
+  // PROCESSING LOGIC:
+  // UPDATE RECORDS BEFORE DELETE / DELETE / INSERT
+  
   // Prepare Return Record to be DELETED
   (1 to recNumber).map(id =>
     val action = Tables.Return
