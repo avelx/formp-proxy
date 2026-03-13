@@ -40,52 +40,43 @@ import scala.concurrent.duration.DurationInt
 import scala.language.postfixOps
 import uk.gov.hmrc.formpproxy.sql.Tables.{profile, *}
 import uk.gov.hmrc.formpproxy.sql.Tables.profile.api.*
+import uk.gov.hmrc.formpproxy.sql.UpdateQueries.{updateReturnMainLandIdAsNull, updateReturnMainPurchaserIdAsNull}
 
 object AllTables extends Tables {
   // or just use object demo.Tables, which is hard-wired to the driver stated during generation
   override val profile: OracleProfile.type = slick.jdbc.OracleProfile
 }
 
-object OracleConnect extends App with Logging {
+object OracleConnect extends App with Logging with OracleConnectBase {
 
   import InsertQueries._
   import DeleteQueries._
   import UpdateQueries._
 
-  implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
+  //////////////////////// MAIN //////////////////////////////////////////////////////////
 
-  val url                                          =
-    """jdbc:oracle:thin:sdlt_file_data/sdlt_file_data@
-                        ( DESCRIPTION=
-                          ( ADDRESS_LIST=
-                            (FAILOVER=ON)
-                            (LOAD_BALANCE=ON)
-                            ( ADDRESS=
-                              (PROTOCOL=TCP)
-                              (HOST=localhost)
-                              (PORT=1521)
-                            )
-                          )
-                          (CONNECT_DATA=
-                            (SERVER=DEDICATED)
-                            ("SID"="xe")
-                          )
-                          (SECURITY=
-                            (SSL_SERVER_CERT_DN="N/A")
-                          )
-                        )""" // connection info
-  implicit val db: profile.backend.JdbcDatabaseDef = Database.forURL(url, driver = "oracle.jdbc.OracleDriver")
+  stepRunner()
 
-  // TODO: allocate different set of IDs per run for: Returns / Agents etc
-  createInProgressReturns(recNumber = 217, storn = "STN001")
-  createSubmittedReturns(recNumber = 187, storn = "STN001")
+  def stepRunner(): Unit = {
+    val stron: String = "STN001"
 
-  def createSubmittedReturns(storn: String, recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
+    purgeDbStep()
+
+    insertOrgStep(stron)
+
+    createInProgressReturnsStep(recNumber = 211, storn = stron)
+
+    createSubmittedReturnsStep(recNumber = 150, storn = stron)
+  }
+
+  ////////////////////////// FUNCTION SET ////////////////////////////////////////////////
+
+  def createSubmittedReturnsStep(storn: String, recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
     // UPDATE: drop relationship / FK restriction before hard record delete
-    updateBeforeDeletion(recNumber, SubmissionReturns)
+    // updateBeforeDeletion(recNumber, SubmissionReturns)
 
     // DELETION
-    deletedRecords(recNumber, SubmissionReturns)
+    // deletedRecords(recNumber, SubmissionReturns)
 
     // INSERT
     insertRecords(recNumber, storn, SubmissionReturns)
@@ -94,15 +85,15 @@ object OracleConnect extends App with Logging {
     postInsertUpdate(recNumber, SubmissionReturns)
   }
 
-  def createInProgressReturns(storn: String, recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
+  def createInProgressReturnsStep(storn: String, recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
 
     // val returnsStates      = Seq("ACCEPTED", "PENDING", "STARTED", "SUBMISTION", "SUBMITTED")
 
     // UPDATE: drop relationship / FK restriction before hard record delete
-    updateBeforeDeletion(recNumber, InProgressReturns)
+    // updateBeforeDeletion(recNumber, InProgressReturns)
 
     // DELETION
-    deletedRecords(recNumber, InProgressReturns)
+    // deletedRecords(recNumber, InProgressReturns)
 
     // INSERT
     insertRecords(recNumber, storn, InProgressReturns)
@@ -110,6 +101,34 @@ object OracleConnect extends App with Logging {
     // CREATE RELATIONSHIP BETWEEN TABLES
     postInsertUpdate(recNumber, InProgressReturns)
   }
+
+  def purgeDbStep(): Unit = {
+
+    Await.result(db.run(updateReturnMainLandIdAction), 15.seconds)
+    Await.result(db.run(updateReturnPurchaserIdAction), 15.seconds)
+
+    logger.info("DELETE_ALL:: Purchaser")
+    Await.result(db.run(deleteAllPurchaserAction), 15.seconds)
+
+    logger.info("DELETE_ALL:: Submitted")
+    Await.result(db.run(deleteAllSubmittedAction), 15.seconds)
+
+    logger.info("DELETE_ALL:: Land")
+    Await.result(db.run(deleteAllLandAction), 15.seconds)
+
+    logger.info("DELETE_ALL:: ReturnAgent")
+    Await.result(db.run(deleteAllReturnAgentAction), 15.seconds)
+
+    logger.info("DELETE_ALL:: Return")
+    Await.result(db.run(deleteAllReturnAction), 15.seconds)
+
+    logger.info("DELETE_ALL:: Organisation")
+    Await.result(db.run(deleteAllOrgsAction), 15.seconds)
+  }
+
+  def insertOrgStep(storn: String): Unit =
+    logger.info(s"INSERT_ORG:: $storn")
+    Await.result(db.run(insertOrgAction), 15.seconds)
 
   def updateBeforeDeletion(recNumber: Int, returnType: ReturnType)(implicit
     db: profile.backend.JdbcDatabaseDef
@@ -158,8 +177,7 @@ object OracleConnect extends App with Logging {
   ): Unit =
     returnType match {
       case InProgressReturns =>
-        val insertAllAction = insertOrgAction andThen
-          insertReturnAction(recNumber, storn, returnType) andThen
+        val insertAllAction = insertReturnAction(recNumber, storn, returnType) andThen
           insertReturnAgent(recNumber, returnType) andThen
           insertLand(recNumber, returnType) andThen insertPurchaser(recNumber, returnType)
 
