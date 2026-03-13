@@ -30,21 +30,22 @@ object InsertQueries {
   import DataGenerator._
 
   // ORGANISATION
-  val insertOrgAction = DBIO
-    .seq(
-      Tables.SdltOrganisation += SdltOrganisationRow(
-        storn = "STN001",
-        doNotDisplayWelcomePage = None,
-        isReturnUser = None,
-        agentCounter = None,
-        returnCounter = None,
-        version = None,
-        lMigrated = None,
-        createDate = java.sql.Timestamp.from(Instant.now()),
-        lastUpdateDate = java.sql.Timestamp.from(Instant.now())
+  val insertOrgAction = (storn: String) =>
+    DBIO
+      .seq(
+        Tables.SdltOrganisation += SdltOrganisationRow(
+          storn = storn,
+          doNotDisplayWelcomePage = None,
+          isReturnUser = None,
+          agentCounter = None,
+          returnCounter = None,
+          version = None,
+          lMigrated = None,
+          createDate = java.sql.Timestamp.from(Instant.now()),
+          lastUpdateDate = java.sql.Timestamp.from(Instant.now())
+        )
       )
-    )
-    .transactionally
+      .transactionally
 
   // RETURNS
   val multipleReturnRows = (recNumber: Int, storn: String, returnType: ReturnType) =>

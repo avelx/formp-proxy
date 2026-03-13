@@ -58,18 +58,18 @@ object OracleConnect extends App with Logging with OracleConnectBase {
   stepRunner()
 
   def stepRunner(): Unit = {
-    val stron: String = "STN001"
+    val stron: String = "STN003"
 
     purgeDbStep()
 
     insertOrgStep(stron)
 
-    createInProgressReturnsStep(recNumber = 79, storn = stron)
+    createInProgressReturnsStep(recNumber = 91, storn = stron)
 
-    createSubmittedReturnsStep(recNumber = 94, storn = stron)
+    createSubmittedReturnsStep(recNumber = 44, storn = stron)
 
-    // TODO: there is a potential bug in how Submitted/DueForDeletion Returns works???
-    // createDueForDeletionReturnsStep(recNumber = 170, storn = stron)§
+    // TODO: <RESOLVE_POTENTIAL BUG> :: there is a potential bug in how Submitted/DueForDeletion Returns works???
+    createDueForDeletionReturnsStep(recNumber = 14, storn = stron)
   }
 
   ////////////////////////// FUNCTION SET ////////////////////////////////////////////////
@@ -115,6 +115,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
 
   def purgeDbStep(): Unit = {
 
+    logger.info("PRE_DELETION_UPDATE:: RETURNs")
     Await.result(db.run(updateReturnMainLandIdAction), 15.seconds)
     Await.result(db.run(updateReturnPurchaserIdAction), 15.seconds)
 
@@ -139,7 +140,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
 
   def insertOrgStep(storn: String): Unit =
     logger.info(s"INSERT_ORG:: $storn")
-    Await.result(db.run(insertOrgAction), 15.seconds)
+    Await.result(db.run(insertOrgAction(storn)), 15.seconds)
 
   def updateBeforeDeletion(recNumber: Int, returnType: ReturnType)(implicit
     db: profile.backend.JdbcDatabaseDef
