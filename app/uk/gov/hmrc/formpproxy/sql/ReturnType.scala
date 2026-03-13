@@ -28,11 +28,11 @@ object ReturnType {
   def getReturnIdRangeStart(returnType: ReturnType): Int =
     returnType match {
       case InProgressReturns     =>
-        10001
+        1
       case SubmissionReturns     =>
-        20001
+        1000
       case DueForDeletionReturns =>
-        20001
+        2000
       case _                     =>
         throw new Exception(s"Not supported returnType: $returnType")
     }

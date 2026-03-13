@@ -64,9 +64,9 @@ object OracleConnect extends App with Logging with OracleConnectBase {
 
     insertOrgStep(stron)
 
-    createInProgressReturnsStep(recNumber = 117, storn = stron)
+    createInProgressReturnsStep(recNumber = 17, storn = stron)
 
-    createSubmittedReturnsStep(recNumber = 350, storn = stron)
+    createSubmittedReturnsStep(recNumber = 35, storn = stron)
 
     // TODO: there is a potential bug in how Submitted/DueForDeletion Returns works???
     // createDueForDeletionReturnsStep(recNumber = 170, storn = stron)§

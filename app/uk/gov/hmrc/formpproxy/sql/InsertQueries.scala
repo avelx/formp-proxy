@@ -27,6 +27,7 @@ import uk.gov.hmrc.formpproxy.sql.Tables.*
 import uk.gov.hmrc.formpproxy.sql.Tables.profile.api.*
 
 object InsertQueries {
+  import DataGenerator._
 
   // ORGANISATION
   val insertOrgAction = DBIO
@@ -102,7 +103,7 @@ object InsertQueries {
         agentType = "PURCHASER",
         name = Some("FoxAgencyy"),
         houseNumber = Some("num 18"),
-        address1 = Some("Address Line" + id),
+        address1 = Some("Address Line 777" + id),
         address2 = None,
         address3 = None,
         address4 = None,
@@ -134,9 +135,9 @@ object InsertQueries {
         returnId = BigDecimal(getReturnIdRangeStart(returnType) + id),
         propertyType = None,
         interestTransferredCreated = None,
-        houseNumber = Some("houseNumber" + id), // inject House number randomisation
-        address1 = Some("Address" + id),
-        address2 = Some("Address" + id),
+        houseNumber = None, // inject House number randomisation
+        address1 = Some(getNextFullAddress),
+        address2 = None,
         address3 = None,
         address4 = None,
         postcode = None,
@@ -173,12 +174,12 @@ object InsertQueries {
         isConnectedToVendor = None,
         isRepresentedByAgent = None,
         title = Some("Mr"),
-        surname = Some("surname"),
-        forename1 = Some("forename2"),
+        surname = Some(getNextSureName),
+        forename1 = None,
         forename2 = None,
-        companyName = Some("companyName"),
-        houseNumber = Some("houseNumber 1"),
-        address1 = Some("Address 1"),
+        companyName = Some("companyName 890"),
+        houseNumber = Some("houseNumber 131"),
+        address1 = Some("Address 17891"),
         address2 = None,
         address3 = None,
         address4 = None,
