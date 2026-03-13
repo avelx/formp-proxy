@@ -64,11 +64,12 @@ object OracleConnect extends App with Logging with OracleConnectBase {
 
     insertOrgStep(stron)
 
-    //createInProgressReturnsStep(recNumber = 117, storn = stron)
+    createInProgressReturnsStep(recNumber = 117, storn = stron)
 
-    //createSubmittedReturnsStep(recNumber = 350, storn = stron)
+    createSubmittedReturnsStep(recNumber = 350, storn = stron)
 
-    createDueForDeletionReturnsStep(recNumber = 170, storn = stron)
+    // TODO: there is a potential bug in how Submitted/DueForDeletion Returns works???
+    // createDueForDeletionReturnsStep(recNumber = 170, storn = stron)§
   }
 
   ////////////////////////// FUNCTION SET ////////////////////////////////////////////////
@@ -212,8 +213,8 @@ object OracleConnect extends App with Logging with OracleConnectBase {
 
         logger.info(s"EXEC:: InsertAction: $returnType")
         Await.result(db.run(insertAllAction), 15.seconds)
-        
-      case _                 =>
+
+      case _ =>
         logger.info(s"EXEC:: InsertAction: EMPTY RUN: $returnType")
     }
 

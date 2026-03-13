@@ -27,61 +27,61 @@ case object DueForDeletionReturns extends ReturnType
 object ReturnType {
   def getReturnIdRangeStart(returnType: ReturnType): Int =
     returnType match {
-      case InProgressReturns =>
+      case InProgressReturns     =>
         10001
-      case SubmissionReturns =>
+      case SubmissionReturns     =>
         20001
       case DueForDeletionReturns =>
         20001
-      case _                 =>
+      case _                     =>
         throw new Exception(s"Not supported returnType: $returnType")
     }
 
   def getReturnAgentIdRangeStart(returnType: ReturnType): Int =
     returnType match {
-      case InProgressReturns =>
+      case InProgressReturns     =>
         30001
-      case SubmissionReturns =>
+      case SubmissionReturns     =>
         50001
       case DueForDeletionReturns =>
         70001
-      case _                 =>
+      case _                     =>
         throw new Exception(s"Not supported returnType: $returnType")
     }
 
   def getLandStart(returnType: ReturnType): Int =
     returnType match {
-      case InProgressReturns =>
+      case InProgressReturns     =>
         4000
-      case SubmissionReturns =>
+      case SubmissionReturns     =>
         5000
       case DueForDeletionReturns =>
         8000
-      case _                 =>
+      case _                     =>
         throw new Exception(s"Not supported returnType: $returnType")
     }
 
   def getPurchaserStart(returnType: ReturnType): Int =
     returnType match {
-      case InProgressReturns =>
+      case InProgressReturns     =>
         10001
-      case SubmissionReturns =>
+      case SubmissionReturns     =>
         20001
       case DueForDeletionReturns =>
         40001
-      case _                 =>
+      case _                     =>
         throw new Exception(s"Not supported returnType: $returnType")
     }
 
   def getSubmittionStart(returnType: ReturnType): Int =
     returnType match {
-      case InProgressReturns =>
+      case InProgressReturns     =>
         900
-      case SubmissionReturns =>
+      case SubmissionReturns     =>
         5000
       case DueForDeletionReturns =>
         9000
-      case _                 =>
+      case _                     =>
         throw new Exception(s"Not supported returnType: $returnType")
     }
 

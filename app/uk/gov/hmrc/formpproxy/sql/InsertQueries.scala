@@ -61,16 +61,21 @@ object InsertQueries {
           mainLandId = None,
           irmarkGenerated = None,
           landCertForEachProp = None,
-          purgeDate = None,
+          purgeDate = returnType match {
+            case DueForDeletionReturns =>
+              Some(java.sql.Timestamp.from(Instant.now()))
+            case _                     =>
+              None
+          },
           returnResourceRef = Some(BigDecimal(getReturnIdRangeStart(returnType) + id)),
           status = returnType match {
-            case InProgressReturns =>
+            case InProgressReturns     =>
               "STARTED"
-            case SubmissionReturns =>
+            case SubmissionReturns     =>
               "SUBMITTED"
             case DueForDeletionReturns =>
               "SUBMITTED" // (''PENDING'',''ACCEPTED'',''STARTED'')'
-            case _                 =>
+            case _                     =>
               "STARTED"
           },
           lMigrated = None,
