@@ -64,12 +64,22 @@ object OracleConnect extends App with Logging with OracleConnectBase {
 
     insertOrgStep(stron)
 
-    createInProgressReturnsStep(recNumber = 211, storn = stron)
+    //createInProgressReturnsStep(recNumber = 117, storn = stron)
 
-    createSubmittedReturnsStep(recNumber = 150, storn = stron)
+    //createSubmittedReturnsStep(recNumber = 350, storn = stron)
+
+    createDueForDeletionReturnsStep(recNumber = 170, storn = stron)
   }
 
   ////////////////////////// FUNCTION SET ////////////////////////////////////////////////
+
+  def createDueForDeletionReturnsStep(storn: String, recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
+    // INSERT
+    insertRecords(recNumber, storn, DueForDeletionReturns)
+
+    // CREATE RELATIONSHIP BETWEEN TABLES
+    postInsertUpdate(recNumber, DueForDeletionReturns)
+  }
 
   def createSubmittedReturnsStep(storn: String, recNumber: Int)(implicit db: profile.backend.JdbcDatabaseDef) = {
     // UPDATE: drop relationship / FK restriction before hard record delete
@@ -192,6 +202,17 @@ object OracleConnect extends App with Logging with OracleConnectBase {
 
         logger.info(s"EXEC:: InsertAction: $returnType")
         Await.result(db.run(insertAllAction), 15.seconds)
+
+      case DueForDeletionReturns =>
+        val insertAllAction =
+          insertReturnAction(recNumber, storn, returnType) andThen
+            insertReturnAgent(recNumber, returnType) andThen
+            insertLand(recNumber, returnType) andThen insertPurchaser(recNumber, returnType) andThen
+            insertSubmittion(recNumber, storn, returnType)
+
+        logger.info(s"EXEC:: InsertAction: $returnType")
+        Await.result(db.run(insertAllAction), 15.seconds)
+        
       case _                 =>
         logger.info(s"EXEC:: InsertAction: EMPTY RUN: $returnType")
     }

@@ -31,6 +31,8 @@ object ReturnType {
         10001
       case SubmissionReturns =>
         20001
+      case DueForDeletionReturns =>
+        20001
       case _                 =>
         throw new Exception(s"Not supported returnType: $returnType")
     }
@@ -41,6 +43,8 @@ object ReturnType {
         30001
       case SubmissionReturns =>
         50001
+      case DueForDeletionReturns =>
+        70001
       case _                 =>
         throw new Exception(s"Not supported returnType: $returnType")
     }
@@ -51,6 +55,8 @@ object ReturnType {
         4000
       case SubmissionReturns =>
         5000
+      case DueForDeletionReturns =>
+        8000
       case _                 =>
         throw new Exception(s"Not supported returnType: $returnType")
     }
@@ -61,6 +67,8 @@ object ReturnType {
         10001
       case SubmissionReturns =>
         20001
+      case DueForDeletionReturns =>
+        40001
       case _                 =>
         throw new Exception(s"Not supported returnType: $returnType")
     }
@@ -71,6 +79,8 @@ object ReturnType {
         900
       case SubmissionReturns =>
         5000
+      case DueForDeletionReturns =>
+        9000
       case _                 =>
         throw new Exception(s"Not supported returnType: $returnType")
     }

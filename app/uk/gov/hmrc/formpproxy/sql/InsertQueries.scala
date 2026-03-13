@@ -68,6 +68,8 @@ object InsertQueries {
               "STARTED"
             case SubmissionReturns =>
               "SUBMITTED"
+            case DueForDeletionReturns =>
+              "SUBMITTED" // (''PENDING'',''ACCEPTED'',''STARTED'')'
             case _                 =>
               "STARTED"
           },
