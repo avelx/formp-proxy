@@ -58,8 +58,9 @@ object OracleConnect extends App with Logging with OracleConnectBase {
   stepRunner()
 
   def stepRunner(): Unit = {
-    val stron: String = "STN003"
+    val stron: String = "STN001"
 
+    // All Returns regardless of STORN ID would be deleted
     purgeDbStep()
 
     insertOrgStep(stron)
@@ -69,7 +70,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
     // createSubmittedReturnsStep(recNumber = 7, storn = stron)
 
     // TODO: <RESOLVE_POTENTIAL BUG> :: there is a potential bug in how Submitted/DueForDeletion Returns works???
-    createDueForDeletionReturnsStep(recNumber = 17, storn = stron)
+    createDueForDeletionReturnsStep(recNumber = 3, storn = stron)
   }
 
   ////////////////////////// FUNCTION SET ////////////////////////////////////////////////

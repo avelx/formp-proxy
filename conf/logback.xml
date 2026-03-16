@@ -21,6 +21,9 @@
         </encoder>
     </appender>
 
+<!--PRINT SQL STATEMENTS-->
+<!--    <logger name="slick" level="INFO" />-->
+<!--    <logger name="slick.jdbc" level="DEBUG" />-->
 
     <logger name="com.google.inject" level="INFO"/>
 
