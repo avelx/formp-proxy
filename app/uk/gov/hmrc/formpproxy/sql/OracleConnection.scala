@@ -64,12 +64,12 @@ object OracleConnect extends App with Logging with OracleConnectBase {
 
     insertOrgStep(stron)
 
-    createInProgressReturnsStep(recNumber = 91, storn = stron)
+    // createInProgressReturnsStep(recNumber = 250, storn = stron)
 
-    createSubmittedReturnsStep(recNumber = 44, storn = stron)
+    // createSubmittedReturnsStep(recNumber = 7, storn = stron)
 
     // TODO: <RESOLVE_POTENTIAL BUG> :: there is a potential bug in how Submitted/DueForDeletion Returns works???
-    createDueForDeletionReturnsStep(recNumber = 14, storn = stron)
+    createDueForDeletionReturnsStep(recNumber = 17, storn = stron)
   }
 
   ////////////////////////// FUNCTION SET ////////////////////////////////////////////////
@@ -151,7 +151,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
       } yield updateReturnMainLandIdAsNull(id, returnType)
     }
     logger.info(s"EXEC:: updateReturnMainLandIdAsNullFuture: $returnType")
-    Await.result(updateReturnMainLandIdAsNullFuture, 15.seconds)
+    Await.result(updateReturnMainLandIdAsNullFuture, 30.seconds)
 
     val updateReturnMainPurchaserIdAsNullFuture = Future.sequence {
       for {
@@ -159,7 +159,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
       } yield updateReturnMainPurchaserIdAsNull(id, returnType)
     }
     logger.info(s"EXEC:: updateReturnMainPurchaserIdAsNull: $returnType")
-    Await.result(updateReturnMainPurchaserIdAsNullFuture, 15.seconds)
+    Await.result(updateReturnMainPurchaserIdAsNullFuture, 30.seconds)
   }
 
   def deletedRecords(recNumber: Int, returnType: ReturnType)(implicit db: profile.backend.JdbcDatabaseDef) =
@@ -171,7 +171,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
           deleteReturns(recNumber, returnType) andThen deleteOrg
 
         logger.info(s"EXEC:: DeleteAll: $returnType")
-        Await.result(db.run(combinedDeletion), 15.seconds)
+        Await.result(db.run(combinedDeletion), 30.seconds)
 
       case SubmissionReturns =>
         val combinedDeletion =
@@ -181,7 +181,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
           // andThen deleteOrg
 
         logger.info(s"EXEC:: DeleteAll: $returnType")
-        Await.result(db.run(combinedDeletion), 15.seconds)
+        Await.result(db.run(combinedDeletion), 30.seconds)
     }
 
   def insertRecords(recNumber: Int, storn: String, returnType: ReturnType)(implicit
@@ -194,7 +194,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
           insertLand(recNumber, returnType) andThen insertPurchaser(recNumber, returnType)
 
         logger.info(s"EXEC:: InsertAction: $returnType")
-        Await.result(db.run(insertAllAction), 15.seconds)
+        Await.result(db.run(insertAllAction), 30.seconds)
       case SubmissionReturns =>
         val insertAllAction = // insertOrgAction andThen
           insertReturnAction(recNumber, storn, returnType) andThen
@@ -203,7 +203,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
             insertSubmittion(recNumber, storn, returnType)
 
         logger.info(s"EXEC:: InsertAction: $returnType")
-        Await.result(db.run(insertAllAction), 15.seconds)
+        Await.result(db.run(insertAllAction), 30.seconds)
 
       case DueForDeletionReturns =>
         val insertAllAction =
@@ -213,7 +213,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
             insertSubmittion(recNumber, storn, returnType)
 
         logger.info(s"EXEC:: InsertAction: $returnType")
-        Await.result(db.run(insertAllAction), 15.seconds)
+        Await.result(db.run(insertAllAction), 30.seconds)
 
       case _ =>
         logger.info(s"EXEC:: InsertAction: EMPTY RUN: $returnType")
@@ -226,7 +226,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
       } yield updateReturnMainLandId(id, returnType)
     }
     logger.info(s"EXEC:: updateReturnMainLandIdFuture: $returnType")
-    Await.result(updateReturnMainLandIdFuture, 15.seconds)
+    Await.result(updateReturnMainLandIdFuture, 30.seconds)
 
     val updateReturnsMainPurchaserIdFuture = Future.sequence {
       for {
@@ -235,7 +235,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
     }
 
     logger.info(s"EXEC:: updateReturnsMainPurchaserId: $returnType")
-    Await.result(updateReturnsMainPurchaserIdFuture, 15.seconds)
+    Await.result(updateReturnsMainPurchaserIdFuture, 30.seconds)
   }
 
 }
