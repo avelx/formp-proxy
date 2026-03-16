@@ -29,7 +29,7 @@ object UpdateQueries {
   def updateReturnMainLandIdAsNull(id: Int, returnType: ReturnType)(implicit
     db: profile.backend.JdbcDatabaseDef
   ): Future[Int] = {
-    Thread.sleep(100)
+    // Thread.sleep(100)
     val action = Tables.Return
       .filter(_.returnId === BigDecimal(getReturnIdRangeStart(returnType) + id))
       .map(_.mainLandId)
@@ -41,7 +41,7 @@ object UpdateQueries {
   def updateReturnMainPurchaserIdAsNull(id: Int, returnType: ReturnType)(implicit
     db: profile.backend.JdbcDatabaseDef
   ): Future[Int] = {
-    Thread.sleep(100)
+    // Thread.sleep(100)
     val action = Tables.Return
       .filter(_.returnId === BigDecimal(getReturnIdRangeStart(returnType) + id))
       .map(_.mainPurchaserId)
@@ -52,8 +52,8 @@ object UpdateQueries {
 
   def updateReturnMainLandId(id: Int, returnType: ReturnType)(implicit
     db: profile.backend.JdbcDatabaseDef
-  ): Future[_] = {
-    Thread.sleep(100)
+  ): Future[_] =
+    // Thread.sleep(100)
     db.run(
       Tables.Return
         .filter(_.returnId === BigDecimal(getReturnIdRangeStart(returnType) + id))
@@ -61,12 +61,11 @@ object UpdateQueries {
         .update(Some(BigDecimal(getLandStart(returnType) + id)))
         .transactionally
     )
-  }
 
   def updateReturnsMainPurchaserId(id: Int, returnType: ReturnType)(implicit
     db: profile.backend.JdbcDatabaseDef
   ): Future[Int] = {
-    Thread.sleep(100)
+    // Thread.sleep(100)
     val action = Tables.Return
       .filter(_.returnId === BigDecimal(getReturnIdRangeStart(returnType) + id))
       .map(_.mainPurchaserId)

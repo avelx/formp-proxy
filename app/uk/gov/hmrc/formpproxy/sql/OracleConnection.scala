@@ -32,28 +32,34 @@ package uk.gov.hmrc.formpproxy.sql
  * limitations under the License.
  */
 
+import org.apache.pekko.pattern.retry
 import play.api.Logging
 import slick.jdbc.OracleProfile
+import uk.gov.hmrc.formpproxy.sql.Tables.profile
 
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.DurationInt
+import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
-import uk.gov.hmrc.formpproxy.sql.Tables.{profile, *}
-import uk.gov.hmrc.formpproxy.sql.Tables.profile.api.*
-import uk.gov.hmrc.formpproxy.sql.UpdateQueries.{updateReturnMainLandIdAsNull, updateReturnMainPurchaserIdAsNull}
 
 object AllTables extends Tables {
   // or just use object demo.Tables, which is hard-wired to the driver stated during generation
   override val profile: OracleProfile.type = slick.jdbc.OracleProfile
 }
 
+import org.apache.pekko
+import org.apache.pekko.actor.ActorSystem
+
+
 object OracleConnect extends App with Logging with OracleConnectBase {
 
-  import InsertQueries._
-  import DeleteQueries._
-  import UpdateQueries._
+  import DeleteQueries.*
+  import InsertQueries.*
+  import UpdateQueries.*
 
   //////////////////////// MAIN //////////////////////////////////////////////////////////
+  val system                                    = ActorSystem("SlickClassicActorSystem")
+  implicit val scheduler: pekko.actor.Scheduler = system.scheduler
+  // implicit val ec: ExecutionContext             = system.executionContext
 
   stepRunner()
 
@@ -65,12 +71,14 @@ object OracleConnect extends App with Logging with OracleConnectBase {
 
     insertOrgStep(stron)
 
-    // createInProgressReturnsStep(recNumber = 250, storn = stron)
+    createInProgressReturnsStep(recNumber = 75, storn = stron)
 
-    // createSubmittedReturnsStep(recNumber = 7, storn = stron)
+    createSubmittedReturnsStep(recNumber = 52, storn = stron)
 
     // TODO: <RESOLVE_POTENTIAL BUG> :: there is a potential bug in how Submitted/DueForDeletion Returns works???
-    createDueForDeletionReturnsStep(recNumber = 3, storn = stron)
+    //createDueForDeletionReturnsStep(recNumber = 3, storn = stron)
+    logger.info(s"EXEC:: End of script")
+    system.terminate()
   }
 
   ////////////////////////// FUNCTION SET ////////////////////////////////////////////////
@@ -141,18 +149,24 @@ object OracleConnect extends App with Logging with OracleConnectBase {
 
   def insertOrgStep(storn: String): Unit =
     logger.info(s"INSERT_ORG:: $storn")
-    Await.result(db.run(insertOrgAction(storn)), 15.seconds)
+    Await.result(db.run(insertOrgAction(storn)), 90.seconds)
 
   def updateBeforeDeletion(recNumber: Int, returnType: ReturnType)(implicit
     db: profile.backend.JdbcDatabaseDef
   ): Seq[Int] = {
-    val updateReturnMainLandIdAsNullFuture = Future.sequence {
-      for {
-        id <- 1 to recNumber
-      } yield updateReturnMainLandIdAsNull(id, returnType)
-    }
+    val updateReturnMainLandIdAsNullFuture =
+      Future.sequence {
+        for {
+          id <- 1 to recNumber
+        } yield updateReturnMainLandIdAsNull(id, returnType)
+      }
     logger.info(s"EXEC:: updateReturnMainLandIdAsNullFuture: $returnType")
-    Await.result(updateReturnMainLandIdAsNullFuture, 30.seconds)
+
+    // Unified retry :: https://pekko.apache.org/docs/pekko/1.0/futures.html
+    val updateReturnMainLandIdAsNullFutureWithRetry: Future[Int] =
+      retry(() => updateReturnMainLandIdAsNullFuture.map(_ => 0), attempts = 3, 5 milliseconds)
+
+    Await.result(updateReturnMainLandIdAsNullFutureWithRetry, 120.seconds)
 
     val updateReturnMainPurchaserIdAsNullFuture = Future.sequence {
       for {
@@ -160,7 +174,12 @@ object OracleConnect extends App with Logging with OracleConnectBase {
       } yield updateReturnMainPurchaserIdAsNull(id, returnType)
     }
     logger.info(s"EXEC:: updateReturnMainPurchaserIdAsNull: $returnType")
-    Await.result(updateReturnMainPurchaserIdAsNullFuture, 30.seconds)
+
+    // Unified retry :: https://pekko.apache.org/docs/pekko/1.0/futures.html
+    val updateReturnMainPurchaserIdAsNullFutureRetry =
+      retry(() => updateReturnMainPurchaserIdAsNullFuture, attempts = 3, 5 milliseconds)
+
+    Await.result(updateReturnMainPurchaserIdAsNullFutureRetry, 120.seconds)
   }
 
   def deletedRecords(recNumber: Int, returnType: ReturnType)(implicit db: profile.backend.JdbcDatabaseDef) =
@@ -172,7 +191,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
           deleteReturns(recNumber, returnType) andThen deleteOrg
 
         logger.info(s"EXEC:: DeleteAll: $returnType")
-        Await.result(db.run(combinedDeletion), 30.seconds)
+        Await.result(db.run(combinedDeletion), 90.seconds)
 
       case SubmissionReturns =>
         val combinedDeletion =
@@ -182,7 +201,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
           // andThen deleteOrg
 
         logger.info(s"EXEC:: DeleteAll: $returnType")
-        Await.result(db.run(combinedDeletion), 30.seconds)
+        Await.result(db.run(combinedDeletion), 90.seconds)
     }
 
   def insertRecords(recNumber: Int, storn: String, returnType: ReturnType)(implicit
@@ -195,7 +214,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
           insertLand(recNumber, returnType) andThen insertPurchaser(recNumber, returnType)
 
         logger.info(s"EXEC:: InsertAction: $returnType")
-        Await.result(db.run(insertAllAction), 30.seconds)
+        Await.result(db.run(insertAllAction), 90.seconds)
       case SubmissionReturns =>
         val insertAllAction = // insertOrgAction andThen
           insertReturnAction(recNumber, storn, returnType) andThen
@@ -204,7 +223,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
             insertSubmittion(recNumber, storn, returnType)
 
         logger.info(s"EXEC:: InsertAction: $returnType")
-        Await.result(db.run(insertAllAction), 30.seconds)
+        Await.result(db.run(insertAllAction), 90.seconds)
 
       case DueForDeletionReturns =>
         val insertAllAction =
@@ -214,7 +233,7 @@ object OracleConnect extends App with Logging with OracleConnectBase {
             insertSubmittion(recNumber, storn, returnType)
 
         logger.info(s"EXEC:: InsertAction: $returnType")
-        Await.result(db.run(insertAllAction), 30.seconds)
+        Await.result(db.run(insertAllAction), 90.seconds)
 
       case _ =>
         logger.info(s"EXEC:: InsertAction: EMPTY RUN: $returnType")
@@ -224,19 +243,31 @@ object OracleConnect extends App with Logging with OracleConnectBase {
     val updateReturnMainLandIdFuture = Future.sequence {
       for {
         id <- 1 to recNumber
-      } yield updateReturnMainLandId(id, returnType)
+      } yield {
+          retry(() => updateReturnMainLandId(id, returnType), attempts = 5, 20 milliseconds)
+      }
     }
     logger.info(s"EXEC:: updateReturnMainLandIdFuture: $returnType")
-    Await.result(updateReturnMainLandIdFuture, 30.seconds)
+
+//    val updateReturnMainLandIdFutureRetry =
+//      retry(() => updateReturnMainLandIdFuture, attempts = 3, 5 milliseconds)
+
+    Await.result(updateReturnMainLandIdFuture, 120.seconds)
 
     val updateReturnsMainPurchaserIdFuture = Future.sequence {
       for {
         id <- 1 to recNumber
-      } yield updateReturnsMainPurchaserId(id, returnType)
+      } yield {
+        retry(() => updateReturnsMainPurchaserId(id, returnType), attempts = 5, 20 milliseconds)
+      }
     }
 
     logger.info(s"EXEC:: updateReturnsMainPurchaserId: $returnType")
-    Await.result(updateReturnsMainPurchaserIdFuture, 30.seconds)
+
+//    val updateReturnsMainPurchaserIdFutureRetry =
+//      retry(() => updateReturnsMainPurchaserIdFuture, attempts = 3, 5 milliseconds)
+
+    Await.result(updateReturnsMainPurchaserIdFuture, 120.seconds)
   }
 
 }

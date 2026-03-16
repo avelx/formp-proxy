@@ -17,6 +17,7 @@ object AppDependencies {
     jdbc,
     "com.typesafe.slick" %% "slick"         % slickVersion,
     "com.typesafe.slick" %% "slick-codegen" % slickVersion,
+    "org.apache.pekko" %% "pekko-actor" % "1.0.1"
   )
 
   val test: Seq[ModuleID] = Seq(
