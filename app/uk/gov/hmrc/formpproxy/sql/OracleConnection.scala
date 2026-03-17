@@ -65,12 +65,12 @@ object OracleConnect extends App with Logging with OracleConnectBase {
 
     insertOrgStep(stron)
 
-    // createInProgressReturnsStep(recNumber = 127, storn = stron)
+    createInProgressReturnsStep(recNumber = 57, storn = stron)
 
-    // createSubmittedReturnsStep(recNumber = 27, storn = stron)
+    // createSubmittedReturnsStep(recNumber = 17, storn = stron)
 
     // TODO: <RESOLVE_POTENTIAL BUG> :: there is a potential bug in how Submitted/DueForDeletion Returns works???
-    createDueForDeletionReturnsStep(recNumber = 3, storn = stron)
+    createDueForDeletionReturnsStep(recNumber = 27, storn = stron)
   }
 
   ////////////////////////// FUNCTION SET ////////////////////////////////////////////////
@@ -163,7 +163,9 @@ object OracleConnect extends App with Logging with OracleConnectBase {
     Await.result(updateReturnMainPurchaserIdAsNullFuture, 30.seconds)
   }
 
-  def deletedRecords(recNumber: Int, returnType: ReturnType, storn: String)(implicit db: profile.backend.JdbcDatabaseDef) =
+  def deletedRecords(recNumber: Int, returnType: ReturnType, storn: String)(implicit
+    db: profile.backend.JdbcDatabaseDef
+  ) =
     returnType match {
       case InProgressReturns =>
         val combinedDeletion = deletePurchaser(recNumber, returnType) andThen
