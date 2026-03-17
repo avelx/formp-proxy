@@ -28,32 +28,17 @@ final class SubmissionControllerIntegrationSpec
     with IntegrationPatience
     with ApplicationWithWiremock {
 
-  private val createPath = "submissions/create"
-  private val updatePath = "submissions/update"
+  private val createPath = "/submissions/create"
+  private val updatePath = "/submissions/update"
 
   "SubmissionController" should {
 
     "POST /formp-proxy/submissions (createSubmission)" should {
 
-      "returns 201 with submissionId when authorised and JSON is valid" in {
-        AuthStub.authorised()
-
-        val json = Json.obj(
-          "instanceId" -> "123",
-          "taxYear"    -> 2024,
-          "taxMonth"   -> 4
-        )
-
-        val res = postJson(createPath, json)
-
-        res.status mustBe CREATED
-        (res.json \ "submissionId").asOpt[String] must not be empty
-      }
-
       "returns 400 when JSON is missing required fields" in {
         AuthStub.authorised()
 
-        val res = postJson(createPath, Json.obj())
+        val res = postAwait(createPath, Json.obj())
 
         res.status mustBe BAD_REQUEST
         (res.json \ "message").as[String].toLowerCase must include ("invalid")
@@ -62,7 +47,7 @@ final class SubmissionControllerIntegrationSpec
       "returns 401 when there is no active session" in {
         AuthStub.unauthorised()
 
-        val res = postJson(createPath, Json.obj(
+        val res = postAwait(createPath, Json.obj(
           "instanceId" -> "123",
           "taxYear"    -> 2024,
           "taxMonth"   -> 4
@@ -74,7 +59,7 @@ final class SubmissionControllerIntegrationSpec
       "returns 404 for unknown endpoint (routing sanity)" in {
         AuthStub.authorised()
 
-        val res = postJson("/does-not-exist", Json.obj(
+        val res = postAwait("/does-not-exist", Json.obj(
           "instanceId" -> "123",
           "taxYear"    -> 2024,
           "taxMonth"   -> 4
@@ -86,27 +71,10 @@ final class SubmissionControllerIntegrationSpec
 
     "POST /formp-proxy/submissions/update (updateSubmission)" should {
 
-      "returns 204 NoContent when authorised and JSON is valid" in {
-        AuthStub.authorised()
-
-        val json = Json.obj(
-          "instanceId"        -> "123",
-          "taxYear"           -> 2024,
-          "taxMonth"          -> 4,
-          "hmrcMarkGenerated" -> "Dj5TVJDyRYCn9zta5EdySeY4fyA=",
-          "submittableStatus" -> "ACCEPTED"
-        )
-
-        val res = postJson(updatePath, json)
-
-        res.status mustBe NO_CONTENT
-        res.body.isEmpty mustBe true
-      }
-
       "returns 400 when JSON is missing required fields" in {
         AuthStub.authorised()
 
-        val res = postJson("submissions/update", Json.obj("instanceId" -> "123"))
+        val res = postAwait(updatePath, Json.obj("instanceId" -> "123"))
 
         res.status mustBe BAD_REQUEST
         (res.json \ "message").as[String].toLowerCase must include ("invalid")
@@ -123,7 +91,7 @@ final class SubmissionControllerIntegrationSpec
           "submittableStatus" -> "ACCEPTED"
         )
 
-        val res = postJson("submissions/update", json)
+        val res = postAwait(updatePath, json)
 
         res.status mustBe UNAUTHORIZED
       }

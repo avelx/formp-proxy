@@ -16,13 +16,19 @@
 
 package uk.gov.hmrc.formpproxy.cis.repositories
 
+import oracle.jdbc.OracleTypes
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any as anyArg, eq as eqTo}
+import org.mockito.ArgumentMatchers.anyInt
 import org.mockito.Mockito.*
 import play.api.db.Database
 import uk.gov.hmrc.formpproxy.base.SpecBase
-import uk.gov.hmrc.formpproxy.cis.models.requests.{CreateNilMonthlyReturnRequest, CreateSubmissionRequest, UpdateSubmissionRequest}
+import uk.gov.hmrc.formpproxy.cis.models.requests.*
+import uk.gov.hmrc.formpproxy.cis.models.*
+import uk.gov.hmrc.formpproxy.shared.utils.CallableStatementUtils.*
 
 import java.sql.*
+import java.time.{Instant, LocalDateTime}
 
 final class CisFormpRepositorySpec extends SpecBase {
 
@@ -72,56 +78,48 @@ final class CisFormpRepositorySpec extends SpecBase {
       val db        = mock[Database]
       val conn      = mock[Connection]
       val cs        = mock[CallableStatement]
+      val rsIgnored = mock[ResultSet]
       val rsMonthly = mock[ResultSet]
 
       when(db.withConnection(anyArg[java.sql.Connection => Any])).thenAnswer { inv =>
         val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
       }
+
       when(conn.prepareCall(anyArg[String])).thenReturn(cs)
-      when(cs.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(null)
-      when(cs.getObject(eqTo(3), eqTo(classOf[ResultSet]))).thenReturn(rsMonthly)
+
+      when(cs.getObject(2, classOf[ResultSet])).thenReturn(rsIgnored)
+      when(rsIgnored.next()).thenReturn(false)
+
+      when(cs.getObject(3, classOf[ResultSet])).thenReturn(rsMonthly)
       when(rsMonthly.next()).thenReturn(false)
 
       val repo = new CisFormpRepository(db)
       val out  = repo.getAllMonthlyReturns("abc-123").futureValue
 
       out.monthlyReturnList mustBe empty
-      verify(conn).prepareCall(eqTo("{ call MONTHLY_RETURN_PROCS_2016.Get_All_Monthly_Returns(?, ?, ?) }"))
+
+      verify(conn).prepareCall("{ call MONTHLY_RETURN_PROCS_2016.Get_All_Monthly_Returns(?, ?, ?) }")
+      verify(cs).setString(1, "abc-123")
+      verify(cs).registerOutParameter(2, OracleTypes.CURSOR)
+      verify(cs).registerOutParameter(3, OracleTypes.CURSOR)
       verify(cs).execute()
     }
   }
 
   "createNilMonthlyReturn" - {
 
-    "call underlying procedures with correct parameters and return STARTED" in {
-      val db          = mock[Database]
-      val conn        = mock[java.sql.Connection]
-      val csCreate    = mock[CallableStatement]
-      val csVersion   = mock[CallableStatement]
-      val csUpdate    = mock[CallableStatement]
-      val csGetScheme = mock[CallableStatement]
-      val rsScheme    = mock[java.sql.ResultSet]
+    "call Create_Monthly_Return SP only and return STARTED" in {
+      val db       = mock[Database]
+      val conn     = mock[java.sql.Connection]
+      val csCreate = mock[CallableStatement]
 
-      when(db.withTransaction(org.mockito.ArgumentMatchers.any[java.sql.Connection => Any]))
+      when(db.withConnection(org.mockito.ArgumentMatchers.any[java.sql.Connection => Any]))
         .thenAnswer { inv =>
           val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
         }
 
-      when(conn.prepareCall("{ call SCHEME_PROCS.int_Get_Scheme(?, ?) }"))
-        .thenReturn(csGetScheme)
-      when(csGetScheme.getObject(eqTo(2), eqTo(classOf[ResultSet])))
-        .thenReturn(rsScheme)
-      when(rsScheme.next()).thenReturn(true, false)
-      when(rsScheme.getInt("version")).thenReturn(0)
-
       when(conn.prepareCall("{ call MONTHLY_RETURN_PROCS_2016.Create_Monthly_Return(?, ?, ?, ?) }"))
         .thenReturn(csCreate)
-      when(conn.prepareCall("{ call SCHEME_PROCS.Update_Version_Number(?, ?) }"))
-        .thenReturn(csVersion)
-      when(
-        conn.prepareCall("{ call MONTHLY_RETURN_PROCS_2016.Update_Monthly_Return(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }")
-      )
-        .thenReturn(csUpdate)
 
       val repo = new CisFormpRepository(db)
 
@@ -139,13 +137,57 @@ final class CisFormpRepositorySpec extends SpecBase {
       verify(conn).prepareCall("{ call MONTHLY_RETURN_PROCS_2016.Create_Monthly_Return(?, ?, ?, ?) }")
       verify(csCreate).execute()
 
-      verify(conn).prepareCall("{ call SCHEME_PROCS.Update_Version_Number(?, ?) }")
-      verify(csVersion).execute()
-
-      verify(conn).prepareCall(
+      verify(conn, never).prepareCall("{ call SCHEME_PROCS.Update_Version_Number(?, ?) }")
+      verify(conn, never).prepareCall(
         "{ call MONTHLY_RETURN_PROCS_2016.Update_Monthly_Return(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
       )
+    }
+  }
+
+  "updateNilMonthlyReturn" - {
+
+    "call Update_Monthly_Return and Update_Scheme_Version SPs in transaction" in {
+      val db          = mock[Database]
+      val conn        = mock[Connection]
+      val csUpdate    = mock[CallableStatement]
+      val csVersion   = mock[CallableStatement]
+      val csGetScheme = mock[CallableStatement]
+      val rsScheme    = mock[ResultSet]
+
+      when(db.withTransaction(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+
+      when(conn.prepareCall("{ call SCHEME_PROCS.int_Get_Scheme(?, ?) }"))
+        .thenReturn(csGetScheme)
+      when(csGetScheme.getObject(eqTo(2), eqTo(classOf[ResultSet])))
+        .thenReturn(rsScheme)
+      when(rsScheme.next()).thenReturn(true, false)
+      when(rsScheme.getInt("version")).thenReturn(1)
+
+      val updateCall = "{ call MONTHLY_RETURN_PROCS_2016.Update_Monthly_Return(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+      when(conn.prepareCall(eqTo(updateCall))).thenReturn(csUpdate)
+
+      val versionCall = "{ call SCHEME_PROCS.Update_Version_Number(?, ?) }"
+      when(conn.prepareCall(eqTo(versionCall))).thenReturn(csVersion)
+
+      val repo = new CisFormpRepository(db)
+      val req  = CreateNilMonthlyReturnRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 2,
+        decInformationCorrect = "Y",
+        decNilReturnNoPayments = "Y"
+      )
+
+      repo.updateNilMonthlyReturn(req).futureValue
+
+      verify(conn).prepareCall("{ call SCHEME_PROCS.int_Get_Scheme(?, ?) }")
+      verify(csGetScheme).execute()
+      verify(conn).prepareCall(eqTo(updateCall))
       verify(csUpdate).execute()
+      verify(conn).prepareCall(eqTo(versionCall))
+      verify(csVersion).execute()
     }
   }
 
@@ -154,6 +196,7 @@ final class CisFormpRepositorySpec extends SpecBase {
     "look up ids, call SPs, return the submission id, and close resources" in {
       val db        = mock[Database]
       val conn      = mock[Connection]
+      val rsIgnored = mock[ResultSet]
       val rsMonthly = mock[ResultSet]
       val csAll     = mock[CallableStatement]
       val csCreate  = mock[CallableStatement]
@@ -162,15 +205,19 @@ final class CisFormpRepositorySpec extends SpecBase {
         val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
       }
 
-      when(conn.prepareCall(eqTo("{ call MONTHLY_RETURN_PROCS_2016.Get_All_Monthly_Returns(?, ?, ?) }")))
+      when(conn.prepareCall("{ call MONTHLY_RETURN_PROCS_2016.Get_All_Monthly_Returns(?, ?, ?) }"))
         .thenReturn(csAll)
-      when(csAll.getObject(eqTo(3), eqTo(classOf[ResultSet]))).thenReturn(rsMonthly)
+
+      when(csAll.getObject(2, classOf[ResultSet])).thenReturn(rsIgnored)
+      when(rsIgnored.next()).thenReturn(false)
+
+      when(csAll.getObject(3, classOf[ResultSet])).thenReturn(rsMonthly)
       when(rsMonthly.next()).thenReturn(true, false)
       when(rsMonthly.getInt("tax_year")).thenReturn(2024)
       when(rsMonthly.getInt("tax_month")).thenReturn(4)
       when(rsMonthly.getLong("monthly_return_id")).thenReturn(7777L)
 
-      when(conn.prepareCall(eqTo("{ call SUBMISSION_PROCS.Create_Submission(?, ?, ?, ?, ?, ?, ?, ?, ?) }")))
+      when(conn.prepareCall("{ call SUBMISSION_PROCS.Create_Submission(?, ?, ?, ?, ?, ?, ?, ?, ?) }"))
         .thenReturn(csCreate)
       when(csCreate.getLong(9)).thenReturn(12345L)
 
@@ -201,6 +248,7 @@ final class CisFormpRepositorySpec extends SpecBase {
       val db        = mock[Database]
       val conn      = mock[Connection]
       val rsScheme  = mock[ResultSet]
+      val rsIgnored = mock[ResultSet]
       val rsMonthly = mock[ResultSet]
       val csScheme  = mock[CallableStatement]
       val csAll     = mock[CallableStatement]
@@ -210,14 +258,18 @@ final class CisFormpRepositorySpec extends SpecBase {
         val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
       }
 
-      when(conn.prepareCall(eqTo("{ call SCHEME_PROCS.int_Get_Scheme(?, ?) }"))).thenReturn(csScheme)
-      when(csScheme.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(rsScheme)
+      when(conn.prepareCall("{ call SCHEME_PROCS.int_Get_Scheme(?, ?) }")).thenReturn(csScheme)
+      when(csScheme.getObject(2, classOf[ResultSet])).thenReturn(rsScheme)
       when(rsScheme.next()).thenReturn(true)
       when(rsScheme.getLong("scheme_id")).thenReturn(9999L)
 
-      when(conn.prepareCall(eqTo("{ call MONTHLY_RETURN_PROCS_2016.Get_All_Monthly_Returns(?, ?, ?) }")))
+      when(conn.prepareCall("{ call MONTHLY_RETURN_PROCS_2016.Get_All_Monthly_Returns(?, ?, ?) }"))
         .thenReturn(csAll)
-      when(csAll.getObject(eqTo(3), eqTo(classOf[ResultSet]))).thenReturn(rsMonthly)
+
+      when(csAll.getObject(2, classOf[ResultSet])).thenReturn(rsIgnored)
+      when(rsIgnored.next()).thenReturn(false)
+
+      when(csAll.getObject(3, classOf[ResultSet])).thenReturn(rsMonthly)
       when(rsMonthly.next()).thenReturn(true, false)
       when(rsMonthly.getInt("tax_year")).thenReturn(2024)
       when(rsMonthly.getInt("tax_month")).thenReturn(4)
@@ -225,10 +277,9 @@ final class CisFormpRepositorySpec extends SpecBase {
 
       when(
         conn.prepareCall(
-          eqTo("{ call SUBMISSION_PROCS_2016.UPDATE_MR_SUBMISSION(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }")
+          "{ call SUBMISSION_PROCS_2016.UPDATE_MR_SUBMISSION(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
         )
-      )
-        .thenReturn(csUpdate)
+      ).thenReturn(csUpdate)
 
       val repo = new CisFormpRepository(db)
 
@@ -253,7 +304,7 @@ final class CisFormpRepositorySpec extends SpecBase {
 
       verify(csUpdate).execute()
       verify(conn).prepareCall(
-        eqTo("{ call SUBMISSION_PROCS_2016.UPDATE_MR_SUBMISSION(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }")
+        "{ call SUBMISSION_PROCS_2016.UPDATE_MR_SUBMISSION(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
       )
     }
   }
@@ -311,17 +362,24 @@ final class CisFormpRepositorySpec extends SpecBase {
 
   "getMonthlyReturnId" - {
 
-    "throw when Get_All_Monthly_Returns returns null monthly cursor (outer null check)" in {
+    "throw when Get_All_Monthly_Returns returns null monthly cursor" in {
       val db         = mock[Database]
       val connection = mock[Connection]
       val cs         = mock[CallableStatement]
+      val rsIgnored  = mock[ResultSet]
 
       when(db.withConnection(anyArg[java.sql.Connection => Any])).thenAnswer { inv =>
         val f = inv.getArgument(0, classOf[java.sql.Connection => Any])
         f(connection)
       }
-      when(connection.prepareCall("{ call MONTHLY_RETURN_PROCS_2016.Get_All_Monthly_Returns(?, ?, ?) }")).thenReturn(cs)
-      when(cs.getObject(eqTo(3), eqTo(classOf[ResultSet]))).thenReturn(null) // ← null monthly cursor
+
+      when(connection.prepareCall("{ call MONTHLY_RETURN_PROCS_2016.Get_All_Monthly_Returns(?, ?, ?) }"))
+        .thenReturn(cs)
+
+      when(cs.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(rsIgnored)
+      when(rsIgnored.next()).thenReturn(false)
+
+      when(cs.getObject(eqTo(3), eqTo(classOf[ResultSet]))).thenReturn(null)
 
       val repo   = new CisFormpRepository(db)
       val method = classOf[CisFormpRepository].getDeclaredMethod(
@@ -332,24 +390,33 @@ final class CisFormpRepositorySpec extends SpecBase {
         classOf[Int]
       )
       method.setAccessible(true)
+
       val thrown = intercept[java.lang.reflect.InvocationTargetException] {
         method.invoke(repo, connection, "abc-123", Int.box(2025), Int.box(2))
       }
-      val cause  = thrown.getCause.asInstanceOf[RuntimeException]
-      cause.getMessage must include("null monthly cursor")
+
+      val cause = thrown.getCause.asInstanceOf[RuntimeException]
+      cause.getMessage must include("SP returned null cursor at index 3")
     }
 
     "throw when no MONTHLY_RETURN matches the requested year/month" in {
       val db         = mock[Database]
       val connection = mock[Connection]
       val cs         = mock[CallableStatement]
+      val rsIgnored  = mock[ResultSet]
       val rs         = mock[ResultSet]
 
       when(db.withConnection(anyArg[java.sql.Connection => Any])).thenAnswer { inv =>
         val f = inv.getArgument(0, classOf[java.sql.Connection => Any])
         f(connection)
       }
-      when(connection.prepareCall("{ call MONTHLY_RETURN_PROCS_2016.Get_All_Monthly_Returns(?, ?, ?) }")).thenReturn(cs)
+
+      when(connection.prepareCall("{ call MONTHLY_RETURN_PROCS_2016.Get_All_Monthly_Returns(?, ?, ?) }"))
+        .thenReturn(cs)
+
+      when(cs.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(rsIgnored)
+      when(rsIgnored.next()).thenReturn(false)
+
       when(cs.getObject(eqTo(3), eqTo(classOf[ResultSet]))).thenReturn(rs)
 
       when(rs.next()).thenReturn(true, true, false)
@@ -365,10 +432,12 @@ final class CisFormpRepositorySpec extends SpecBase {
         classOf[Int]
       )
       method.setAccessible(true)
+
       val thrown = intercept[java.lang.reflect.InvocationTargetException] {
         method.invoke(repo, connection, "abc-123", Int.box(2025), Int.box(2))
       }
-      val cause  = thrown.getCause.asInstanceOf[RuntimeException]
+
+      val cause = thrown.getCause.asInstanceOf[RuntimeException]
       cause.getMessage must include("No MONTHLY_RETURN for instance_id=abc-123 year=2025 month=2")
     }
   }
@@ -465,6 +534,1475 @@ final class CisFormpRepositorySpec extends SpecBase {
 
       verify(cs).execute()
       verify(rs).close()
+    }
+  }
+
+  "getScheme" - {
+
+    "returns Some(ContractorScheme) with all fields when result set has data" in {
+      val db   = mock[Database]
+      val conn = mock[java.sql.Connection]
+      val cs   = mock[CallableStatement]
+      val rs   = mock[ResultSet]
+
+      when(db.withConnection(anyArg[java.sql.Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall("{ call SCHEME_PROCS.int_Get_Scheme(?, ?) }")).thenReturn(cs)
+      when(cs.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(rs)
+      when(rs.next()).thenReturn(true, false)
+
+      when(rs.getInt("scheme_id")).thenReturn(123)
+      when(rs.getString("instance_id")).thenReturn("abc-123")
+      when(rs.getString("aoref")).thenReturn("123456789")
+      when(rs.getString("tax_office_number")).thenReturn("0001")
+      when(rs.getString("tax_office_reference")).thenReturn("AB12345")
+      when(rs.getString("utr")).thenReturn("1234567890")
+      when(rs.getString("name")).thenReturn("Test Contractor")
+      when(rs.getString("email_address")).thenReturn("test@example.com")
+      when(rs.getString("display_welcome_page")).thenReturn("Y")
+      when(rs.getInt("pre_pop_count")).thenReturn(5)
+      when(rs.wasNull()).thenReturn(false)
+      when(rs.getString("pre_pop_successful")).thenReturn("Y")
+      when(rs.getInt("subcontractor_counter")).thenReturn(10)
+      when(rs.wasNull()).thenReturn(false)
+      when(rs.getInt("verif_batch_counter")).thenReturn(2)
+      when(rs.wasNull()).thenReturn(false)
+      when(rs.getTimestamp("last_update")).thenReturn(Timestamp.from(Instant.parse("2025-12-04T10:15:30Z")))
+      when(rs.getInt("version")).thenReturn(1)
+      when(rs.wasNull()).thenReturn(false)
+      when(rs.getInt("version")).thenReturn(1)
+      when(rs.wasNull()).thenReturn(false)
+
+      val repo   = new CisFormpRepository(db)
+      val result = repo.getScheme("abc-123").futureValue
+
+      result must be(Symbol("defined"))
+      val scheme = result.get
+      scheme.schemeId mustBe 123
+      scheme.instanceId mustBe "abc-123"
+      scheme.accountsOfficeReference mustBe "123456789"
+      scheme.taxOfficeNumber mustBe "0001"
+      scheme.taxOfficeReference mustBe "AB12345"
+      scheme.utr mustBe Some("1234567890")
+      scheme.name mustBe Some("Test Contractor")
+      scheme.emailAddress mustBe Some("test@example.com")
+      scheme.displayWelcomePage mustBe Some("Y")
+      scheme.prePopCount mustBe Some(5)
+      scheme.prePopSuccessful mustBe Some("Y")
+      scheme.subcontractorCounter mustBe Some(10)
+      scheme.verificationBatchCounter mustBe Some(2)
+      scheme.lastUpdate mustBe Some(Instant.parse("2025-12-04T10:15:30Z"))
+      scheme.version mustBe Some(1)
+
+      verify(cs).execute()
+      verify(rs).close()
+    }
+
+    "returns None when result set is empty" in {
+      val db   = mock[Database]
+      val conn = mock[java.sql.Connection]
+      val cs   = mock[CallableStatement]
+      val rs   = mock[ResultSet]
+
+      when(db.withConnection(anyArg[java.sql.Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall("{ call SCHEME_PROCS.int_Get_Scheme(?, ?) }")).thenReturn(cs)
+      when(cs.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(rs)
+      when(rs.next()).thenReturn(false)
+
+      val repo   = new CisFormpRepository(db)
+      val result = repo.getScheme("unknown-123").futureValue
+
+      result mustBe None
+
+      verify(cs).execute()
+      verify(rs).close()
+    }
+
+    "handles null optional fields correctly" in {
+      val db   = mock[Database]
+      val conn = mock[java.sql.Connection]
+      val cs   = mock[CallableStatement]
+      val rs   = mock[ResultSet]
+
+      when(db.withConnection(anyArg[java.sql.Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall("{ call SCHEME_PROCS.int_Get_Scheme(?, ?) }")).thenReturn(cs)
+      when(cs.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(rs)
+      when(rs.next()).thenReturn(true, false)
+
+      when(rs.getInt("scheme_id")).thenReturn(456)
+      when(rs.getString("instance_id")).thenReturn("def-456")
+      when(rs.getString("aoref")).thenReturn("987654321")
+      when(rs.getString("tax_office_number")).thenReturn("0002")
+      when(rs.getString("tax_office_reference")).thenReturn("CD67890")
+      when(rs.getString("utr")).thenReturn(null)
+      when(rs.getString("name")).thenReturn(null)
+      when(rs.getString("email_address")).thenReturn(null)
+      when(rs.getString("display_welcome_page")).thenReturn(null)
+      when(rs.getInt("pre_pop_count")).thenReturn(0)
+      when(rs.wasNull()).thenReturn(true)
+      when(rs.getString("pre_pop_successful")).thenReturn(null)
+      when(rs.getInt("subcontractor_counter")).thenReturn(0)
+      when(rs.wasNull()).thenReturn(true)
+      when(rs.getInt("verif_batch_counter")).thenReturn(0)
+      when(rs.wasNull()).thenReturn(true)
+      when(rs.getString("last_update")).thenReturn(null)
+      when(rs.getInt("version")).thenReturn(0)
+      when(rs.wasNull()).thenReturn(true)
+
+      val repo   = new CisFormpRepository(db)
+      val result = repo.getScheme("def-456").futureValue
+
+      result must be(Symbol("defined"))
+      val scheme = result.get
+      scheme.schemeId mustBe 456
+      scheme.instanceId mustBe "def-456"
+      scheme.utr mustBe None
+      scheme.name mustBe None
+      scheme.emailAddress mustBe None
+      scheme.displayWelcomePage mustBe None
+      scheme.prePopCount mustBe None
+      scheme.prePopSuccessful mustBe None
+      scheme.subcontractorCounter mustBe None
+      scheme.verificationBatchCounter mustBe None
+      scheme.lastUpdate mustBe None
+      scheme.version mustBe None
+
+      verify(cs).execute()
+      verify(rs).close()
+    }
+
+    "throws RuntimeException when result set cursor is null" in {
+      val db   = mock[Database]
+      val conn = mock[java.sql.Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[java.sql.Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall("{ call SCHEME_PROCS.int_Get_Scheme(?, ?) }")).thenReturn(cs)
+      when(cs.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(null)
+
+      val repo = new CisFormpRepository(db)
+      val ex   = repo.getScheme("null-cursor-123").failed.futureValue
+
+      ex mustBe a[RuntimeException]
+      ex.getMessage must include("SP returned null cursor at index 2")
+
+      verify(cs).execute()
+    }
+  }
+
+  "updateScheme" - {
+
+    "call SCHEME_PROCS.Update_Scheme with correct parameters and return version" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall(eqTo("{ call SCHEME_PROCS.Update_Scheme(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }")))
+        .thenReturn(cs)
+      when(cs.getInt(12)).thenReturn(2)
+
+      val repo         = new CisFormpRepository(db)
+      val updateParams = UpdateContractorSchemeParams(
+        schemeId = 123,
+        instanceId = "abc-123",
+        accountsOfficeReference = "111111111",
+        taxOfficeNumber = "0001",
+        taxOfficeReference = "AB12345",
+        utr = Some("1234567890"),
+        name = Some("Updated Contractor"),
+        emailAddress = Some("updated@example.com"),
+        displayWelcomePage = Some("Y"),
+        prePopCount = Some(10),
+        prePopSuccessful = Some("Y"),
+        version = Some(1)
+      )
+
+      val result = repo.updateScheme(updateParams).futureValue
+      result mustBe 2
+
+      verify(conn).prepareCall(eqTo("{ call SCHEME_PROCS.Update_Scheme(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"))
+      verify(cs).setInt(1, 123)
+      verify(cs).setString(2, "abc-123")
+      verify(cs).setString(3, "111111111")
+      verify(cs).setString(4, "0001")
+      verify(cs).setString(5, "AB12345")
+      verify(cs).setString(6, "1234567890")
+      verify(cs).setString(7, "Updated Contractor")
+      verify(cs).setString(8, "updated@example.com")
+      verify(cs).setString(9, "Y")
+      verify(cs).setString(11, "Y")
+      verify(cs).registerOutParameter(12, OracleTypes.INTEGER)
+      verify(cs).execute()
+      verify(cs).getInt(12)
+      verify(cs).close()
+    }
+
+    "call SCHEME_PROCS.Update_Scheme with null optional fields" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall(eqTo("{ call SCHEME_PROCS.Update_Scheme(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }")))
+        .thenReturn(cs)
+      when(cs.getInt(12)).thenReturn(3)
+
+      val repo         = new CisFormpRepository(db)
+      val updateParams = UpdateContractorSchemeParams(
+        schemeId = 456,
+        instanceId = "sparse-123",
+        accountsOfficeReference = "555555555",
+        taxOfficeNumber = "0055",
+        taxOfficeReference = "YY55555",
+        version = Some(2)
+      )
+
+      val result = repo.updateScheme(updateParams).futureValue
+      result mustBe 3
+
+      verify(conn).prepareCall(eqTo("{ call SCHEME_PROCS.Update_Scheme(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"))
+      verify(cs).setInt(1, 456)
+      verify(cs).setString(2, "sparse-123")
+      verify(cs).setString(3, "555555555")
+      verify(cs).setString(4, "0055")
+      verify(cs).setString(5, "YY55555")
+      verify(cs).setString(6, null)
+      verify(cs).setString(7, null)
+      verify(cs).setString(8, null)
+      verify(cs).setString(9, null)
+      verify(cs).setString(11, null)
+      verify(cs).registerOutParameter(12, OracleTypes.INTEGER)
+      verify(cs).execute()
+      verify(cs).getInt(12)
+      verify(cs).close()
+    }
+  }
+
+  "createScheme" - {
+
+    "call SCHEME_PROCS.Create_Scheme with correct parameters and return schemeId" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall(eqTo("{ call SCHEME_PROCS.Create_Scheme(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }")))
+        .thenReturn(cs)
+      when(cs.getInt(11)).thenReturn(123)
+
+      val repo         = new CisFormpRepository(db)
+      val createParams = CreateContractorSchemeParams(
+        instanceId = "abc-123",
+        accountsOfficeReference = "111111111",
+        taxOfficeNumber = "0001",
+        taxOfficeReference = "AB12345",
+        utr = Some("1234567890"),
+        name = Some("Test Contractor"),
+        emailAddress = Some("test@example.com"),
+        displayWelcomePage = Some("Y"),
+        prePopCount = Some(5),
+        prePopSuccessful = Some("Y")
+      )
+
+      val result = repo.createScheme(createParams).futureValue
+      result mustBe 123
+
+      verify(conn).prepareCall(eqTo("{ call SCHEME_PROCS.Create_Scheme(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"))
+      verify(cs).setString(1, "abc-123")
+      verify(cs).setString(2, "111111111")
+      verify(cs).setString(3, "0001")
+      verify(cs).setString(4, "AB12345")
+      verify(cs).setString(5, "1234567890")
+      verify(cs).setString(6, "Test Contractor")
+      verify(cs).setString(7, "test@example.com")
+      verify(cs).setString(8, "Y")
+      verify(cs).setString(10, "Y")
+      verify(cs).registerOutParameter(11, OracleTypes.INTEGER)
+      verify(cs).execute()
+      verify(cs).getInt(11)
+      verify(cs).close()
+    }
+
+    "call SCHEME_PROCS.Create_Scheme with null optional fields" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall(eqTo("{ call SCHEME_PROCS.Create_Scheme(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }")))
+        .thenReturn(cs)
+      when(cs.getInt(11)).thenReturn(456)
+
+      val repo         = new CisFormpRepository(db)
+      val createParams = CreateContractorSchemeParams(
+        instanceId = "sparse-123",
+        accountsOfficeReference = "555555555",
+        taxOfficeNumber = "0055",
+        taxOfficeReference = "YY55555"
+      )
+
+      val result = repo.createScheme(createParams).futureValue
+      result mustBe 456
+
+      verify(conn).prepareCall(eqTo("{ call SCHEME_PROCS.Create_Scheme(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"))
+      verify(cs).setString(1, "sparse-123")
+      verify(cs).setString(2, "555555555")
+      verify(cs).setString(3, "0055")
+      verify(cs).setString(4, "YY55555")
+      verify(cs).setString(5, null)
+      verify(cs).setString(6, null)
+      verify(cs).setString(7, null)
+      verify(cs).setString(8, null)
+      verify(cs).setString(10, null)
+      verify(cs).registerOutParameter(11, OracleTypes.INTEGER)
+      verify(cs).execute()
+      verify(cs).getInt(11)
+      verify(cs).close()
+    }
+
+    "call SCHEME_PROCS.Create_Scheme with Some(prePopCount)" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall(eqTo("{ call SCHEME_PROCS.Create_Scheme(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }")))
+        .thenReturn(cs)
+      when(cs.getInt(11)).thenReturn(789)
+
+      val repo         = new CisFormpRepository(db)
+      val createParams = CreateContractorSchemeParams(
+        instanceId = "count-123",
+        accountsOfficeReference = "999999999",
+        taxOfficeNumber = "0099",
+        taxOfficeReference = "ZZ99999",
+        prePopCount = Some(100)
+      )
+
+      val result = repo.createScheme(createParams).futureValue
+      result mustBe 789
+
+      verify(conn).prepareCall(eqTo("{ call SCHEME_PROCS.Create_Scheme(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"))
+      verify(cs).execute()
+      verify(cs).getInt(11)
+      verify(cs).close()
+    }
+  }
+
+  "updateSchemeVersion" - {
+
+    "call SCHEME_PROCS.Update_Version_Number with correct parameters and return version" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall(eqTo("{ call SCHEME_PROCS.Update_Version_Number(?, ?) }")))
+        .thenReturn(cs)
+      when(cs.getInt(2)).thenReturn(2)
+
+      val repo   = new CisFormpRepository(db)
+      val result = repo.updateSchemeVersion("abc-123", 1).futureValue
+      result mustBe 2
+
+      verify(conn).prepareCall(eqTo("{ call SCHEME_PROCS.Update_Version_Number(?, ?) }"))
+      verify(cs).setString(1, "abc-123")
+      verify(cs).setInt(2, 1)
+      verify(cs).registerOutParameter(2, Types.INTEGER)
+      verify(cs).execute()
+      verify(cs).getInt(2)
+      verify(cs).close()
+    }
+  }
+
+  "applyPrepopulation" - {
+
+    "calls update scheme + creates subcontractors + updates version and returns new version" in {
+      val db          = mock[Database]
+      val conn        = mock[Connection]
+      val csUpdate    = mock[CallableStatement]
+      val csSub       = mock[CallableStatement]
+      val csUpdateVer = mock[CallableStatement]
+
+      when(db.withTransaction(anyArg[java.sql.Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
+      }
+
+      when(conn.prepareCall(eqTo("{ call SCHEME_PROCS.Update_Scheme(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }")))
+        .thenReturn(csUpdate)
+
+      when(conn.prepareCall(eqTo("{ call SUBCONTRACTOR_PROCS.CREATE_SUBCONTRACTOR(?, ?, ?, ?) }")))
+        .thenReturn(csSub)
+
+      when(conn.prepareCall(eqTo("{ call SCHEME_PROCS.Update_Version_Number(?, ?) }")))
+        .thenReturn(csUpdateVer)
+
+      when(csUpdateVer.getInt(2)).thenReturn(2)
+
+      val repo = new CisFormpRepository(db)
+
+      val req = ApplyPrepopulationRequest(
+        schemeId = 789,
+        instanceId = "abc-123",
+        accountsOfficeReference = "111111111",
+        taxOfficeNumber = "123",
+        taxOfficeReference = "AB456",
+        utr = Some("9876543210"),
+        name = "Test Contractor",
+        emailAddress = Some("test@test.com"),
+        displayWelcomePage = Some("Y"),
+        prePopCount = 5,
+        prePopSuccessful = "Y",
+        version = 1,
+        subcontractorTypes = Seq(SoleTrader, Company)
+      )
+
+      val out = repo.applyPrepopulation(req).futureValue
+      out mustBe 2
+
+      verify(conn).prepareCall(eqTo("{ call SCHEME_PROCS.Update_Scheme(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"))
+      verify(conn, times(req.subcontractorTypes.size))
+        .prepareCall(eqTo("{ call SUBCONTRACTOR_PROCS.CREATE_SUBCONTRACTOR(?, ?, ?, ?) }"))
+      verify(conn).prepareCall(eqTo("{ call SCHEME_PROCS.Update_Version_Number(?, ?) }"))
+
+      verify(csUpdate).execute()
+      verify(csSub, times(req.subcontractorTypes.size)).execute()
+      verify(csUpdateVer).execute()
+    }
+  }
+
+  "createMonthlyReturn" - {
+
+    "call MONTHLY_RETURN_PROCS_2016.Create_Monthly_Return with correct parameters and execute" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall(eqTo("{ call MONTHLY_RETURN_PROCS_2016.Create_Monthly_Return(?, ?, ?, ?) }")))
+        .thenReturn(cs)
+
+      val repo = new CisFormpRepository(db)
+
+      val req = CreateMonthlyReturnRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 2
+      )
+
+      repo.createMonthlyReturn(req).futureValue mustBe ()
+
+      verify(conn).prepareCall(eqTo("{ call MONTHLY_RETURN_PROCS_2016.Create_Monthly_Return(?, ?, ?, ?) }"))
+      verify(cs).setString(1, "abc-123")
+      verify(cs).setInt(2, 2025)
+      verify(cs).setInt(3, 2)
+      verify(cs).setString(4, "N")
+      verify(cs).execute()
+      verify(cs).close()
+    }
+  }
+
+  "getUnsubmittedMonthlyReturns" - {
+
+    "calls MONTHLY_RETURN_PROCS_2016.Get_Unsubmitted_Monthly_Returns and returns list of instance IDs" in {
+      val db        = mock[Database]
+      val conn      = mock[java.sql.Connection]
+      val cs        = mock[CallableStatement]
+      val rsScheme  = mock[ResultSet]
+      val rsMonthly = mock[ResultSet]
+
+      when(db.withConnection(anyArg[java.sql.Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall("{ call MONTHLY_RETURN_PROCS_2016.Get_Monthly_Returns(?, ?, ?) }")).thenReturn(cs)
+      when(cs.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(rsScheme)
+      when(cs.getObject(eqTo(3), eqTo(classOf[ResultSet]))).thenReturn(rsMonthly)
+
+      when(rsScheme.next()).thenReturn(true, false)
+      when(rsScheme.getString("instance_id")).thenReturn("abc-123")
+      when(rsScheme.getString("aoref")).thenReturn("123pa132456789")
+      when(rsScheme.getString("tax_office_number")).thenReturn("123")
+      when(rsScheme.getString("tax_office_reference")).thenReturn("AB456")
+
+      when(rsMonthly.next()).thenReturn(true, false)
+      when(rsMonthly.getString("tax_year")).thenReturn("2025")
+      when(rsMonthly.getString("tax_month")).thenReturn("2")
+      when(rsMonthly.getString("nil_return_indicator")).thenReturn("Y")
+      when(rsMonthly.getString("status")).thenReturn("PENDING")
+      when(rsMonthly.getTimestamp("last_update")).thenReturn(Timestamp.valueOf("2025-01-31 12:34:56"))
+
+      val repo   = new CisFormpRepository(db)
+      val result = repo.getUnsubmittedMonthlyReturns("abc-123").futureValue
+
+      result.scheme.instanceId mustBe "abc-123"
+      result.monthlyReturn must have size 1
+      result.monthlyReturn.head.nilReturnIndicator mustBe Some("Y")
+      result.monthlyReturn.head.status mustBe Some("PENDING")
+    }
+  }
+
+  "getMonthlyReturnForEdit" - {
+
+    "calls SP and returns empty response when all cursors are empty" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      val rsScheme         = mock[ResultSet]
+      val rsMonthlyReturn  = mock[ResultSet]
+      val rsItems          = mock[ResultSet]
+      val rsSubcontractors = mock[ResultSet]
+      val rsSubmission     = mock[ResultSet]
+
+      when(db.withConnection(anyArg[java.sql.Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
+      }
+
+      when(
+        conn.prepareCall(
+          eqTo("{ call MONTHLY_RETURN_PROCS_2016.Get_Monthly_Return_For_Edit(?, ?, ?, ?, ?, ?, ?, ?, ?) }")
+        )
+      )
+        .thenReturn(cs)
+
+      when(cs.getObject(eqTo(5), eqTo(classOf[ResultSet]))).thenReturn(rsScheme)
+      when(cs.getObject(eqTo(6), eqTo(classOf[ResultSet]))).thenReturn(rsMonthlyReturn)
+      when(cs.getObject(eqTo(7), eqTo(classOf[ResultSet]))).thenReturn(rsItems)
+      when(cs.getObject(eqTo(8), eqTo(classOf[ResultSet]))).thenReturn(rsSubcontractors)
+      when(cs.getObject(eqTo(9), eqTo(classOf[ResultSet]))).thenReturn(rsSubmission)
+
+      when(rsScheme.next()).thenReturn(false)
+      when(rsMonthlyReturn.next()).thenReturn(false)
+      when(rsItems.next()).thenReturn(false)
+      when(rsSubcontractors.next()).thenReturn(false)
+      when(rsSubmission.next()).thenReturn(false)
+
+      val repo = new CisFormpRepository(db)
+
+      val out = repo.getMonthlyReturnForEdit("abc-123", 2025, 1).futureValue
+
+      out.scheme mustBe empty
+      out.monthlyReturn mustBe empty
+      out.monthlyReturnItems mustBe empty
+      out.subcontractors mustBe empty
+      out.submission mustBe empty
+
+      verify(conn).prepareCall(
+        eqTo("{ call MONTHLY_RETURN_PROCS_2016.Get_Monthly_Return_For_Edit(?, ?, ?, ?, ?, ?, ?, ?, ?) }")
+      )
+      verify(cs).setString(1, "abc-123")
+      verify(cs).setInt(2, 2025)
+      verify(cs).setInt(3, 1)
+      verify(cs).setString(4, "N")
+      verify(cs).registerOutParameter(5, OracleTypes.CURSOR)
+      verify(cs).registerOutParameter(6, OracleTypes.CURSOR)
+      verify(cs).registerOutParameter(7, OracleTypes.CURSOR)
+      verify(cs).registerOutParameter(8, OracleTypes.CURSOR)
+      verify(cs).registerOutParameter(9, OracleTypes.CURSOR)
+      verify(cs).execute()
+    }
+  }
+
+  "createAndUpdateSubcontractor" - {
+
+    def stubCommon(
+      db: Database,
+      conn: Connection,
+      csGetScheme: CallableStatement,
+      rsScheme: ResultSet,
+      csCreate: CallableStatement,
+      csVersion: CallableStatement,
+      csUpdate: CallableStatement
+    ): Unit = {
+      when(db.withTransaction(org.mockito.ArgumentMatchers.any[java.sql.Connection => Any]))
+        .thenAnswer { inv =>
+          val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
+        }
+
+      when(conn.prepareCall("{ call SCHEME_PROCS.int_Get_Scheme(?, ?) }"))
+        .thenReturn(csGetScheme)
+      when(csGetScheme.getObject(eqTo(2), eqTo(classOf[ResultSet])))
+        .thenReturn(rsScheme)
+      when(rsScheme.next()).thenReturn(true, false)
+      when(rsScheme.getLong("scheme_id")).thenReturn(123L)
+      when(rsScheme.getInt("version")).thenReturn(1)
+      when(rsScheme.wasNull()).thenReturn(false)
+
+      when(conn.prepareCall("{ call SUBCONTRACTOR_PROCS.CREATE_SUBCONTRACTOR(?, ?, ?, ?) }"))
+        .thenReturn(csCreate)
+      when(csCreate.getInt(4)).thenReturn(999)
+
+      when(conn.prepareCall("{ call SCHEME_PROCS.Update_Version_Number(?, ?) }"))
+        .thenReturn(csVersion)
+      when(csVersion.getInt(2)).thenReturn(2)
+
+      when(
+        conn.prepareCall(
+          "{ call SUBCONTRACTOR_PROCS.Update_Subcontractor(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+        )
+      ).thenReturn(csUpdate)
+    }
+
+    "call underlying procedures with correct parameters for SoleTrader" in {
+      val db          = mock[Database]
+      val conn        = mock[Connection]
+      val csGetScheme = mock[CallableStatement]
+      val rsScheme    = mock[ResultSet]
+      val csCreate    = mock[CallableStatement]
+      val csVersion   = mock[CallableStatement]
+      val csUpdate    = mock[CallableStatement]
+
+      stubCommon(db, conn, csGetScheme, rsScheme, csCreate, csVersion, csUpdate)
+
+      val repo = new CisFormpRepository(db)
+
+      val request = CreateAndUpdateSubcontractorDatabaseRecord(
+        cisId = "abc-123",
+        subcontractorType = SoleTrader,
+        utr = Some("1234567890"),
+        partnerUtr = None,
+        crn = None,
+        firstName = Some("John"),
+        secondName = Some("Q"),
+        surname = Some("Smith"),
+        nino = Some("AA123456A"),
+        partnershipTradingName = None,
+        tradingName = Some("ACME"),
+        addressLine1 = Some("1 Main Street"),
+        addressLine2 = Some("Flat 2"),
+        city = Some("London"),
+        county = Some("Greater London"),
+        country = Some("United Kingdom"),
+        postcode = Some("AA1 1AA"),
+        emailAddress = Some("test@test.com"),
+        phoneNumber = Some("01234567890"),
+        mobilePhoneNumber = Some("07123456789"),
+        worksReferenceNumber = Some("34567")
+      )
+
+      repo.createAndUpdateSubcontractor(request).futureValue
+
+      verify(csCreate).setString(3, "soletrader")
+      verify(csUpdate).setString(7, "John")
+      verify(csUpdate).setString(9, "Q")
+      verify(csUpdate).setString(10, "Smith")
+      verify(csUpdate).setString(8, "AA123456A")
+      verify(csUpdate).setString(17, "United Kingdom")
+      verify(csUpdate).execute()
+    }
+
+    "call underlying procedures with correct parameters for Partnership" in {
+      val db          = mock[Database]
+      val conn        = mock[Connection]
+      val csGetScheme = mock[CallableStatement]
+      val rsScheme    = mock[ResultSet]
+      val csCreate    = mock[CallableStatement]
+      val csVersion   = mock[CallableStatement]
+      val csUpdate    = mock[CallableStatement]
+
+      stubCommon(db, conn, csGetScheme, rsScheme, csCreate, csVersion, csUpdate)
+
+      val repo = new CisFormpRepository(db)
+
+      val request = CreateAndUpdateSubcontractorDatabaseRecord(
+        cisId = "abc-123",
+        subcontractorType = Partnership,
+        utr = Some("2234567890"),
+        partnerUtr = None,
+        crn = None,
+        firstName = None,
+        secondName = None,
+        surname = None,
+        nino = None,
+        partnershipTradingName = Some("ABC Partnership"),
+        tradingName = Some("Nominated Partner"),
+        addressLine1 = Some("2 High Street"),
+        addressLine2 = Some("Suite 5"),
+        city = Some("Leeds"),
+        county = Some("West Yorkshire"),
+        country = Some("United Kingdom"),
+        postcode = Some("LS1 1AA"),
+        emailAddress = Some("partnership@test.com"),
+        phoneNumber = Some("01131234567"),
+        mobilePhoneNumber = Some("07999999999"),
+        worksReferenceNumber = Some("PART-001")
+      )
+
+      repo.createAndUpdateSubcontractor(request).futureValue
+
+      verify(csCreate).setString(3, "partnership")
+      verify(csUpdate).setNull(eqTo(7), anyInt())
+      verify(csUpdate).setNull(eqTo(9), anyInt())
+      verify(csUpdate).setNull(eqTo(10), anyInt())
+      verify(csUpdate).setNull(eqTo(8), anyInt())
+      verify(csUpdate).setString(11, "ABC Partnership")
+      verify(csUpdate).setString(12, "Nominated Partner")
+      verify(csUpdate).setString(15, "Leeds")
+      verify(csUpdate).setString(16, "West Yorkshire")
+      verify(csUpdate).setString(17, "United Kingdom")
+      verify(csUpdate).execute()
+    }
+
+    "call underlying procedures with correct parameters for Company" in {
+      val db          = mock[Database]
+      val conn        = mock[Connection]
+      val csGetScheme = mock[CallableStatement]
+      val rsScheme    = mock[ResultSet]
+      val csCreate    = mock[CallableStatement]
+      val csVersion   = mock[CallableStatement]
+      val csUpdate    = mock[CallableStatement]
+
+      stubCommon(db, conn, csGetScheme, rsScheme, csCreate, csVersion, csUpdate)
+
+      val repo = new CisFormpRepository(db)
+
+      val request = CreateAndUpdateSubcontractorDatabaseRecord(
+        cisId = "abc-123",
+        subcontractorType = Company,
+        utr = Some("3234567890"),
+        partnerUtr = None,
+        crn = Some("CRN-999"),
+        firstName = None,
+        secondName = None,
+        surname = None,
+        nino = None,
+        partnershipTradingName = None,
+        tradingName = Some("ABC Limited"),
+        addressLine1 = Some("3 Business Park"),
+        addressLine2 = Some("Block A"),
+        city = Some("Manchester"),
+        county = Some("Greater Manchester"),
+        country = Some("United Kingdom"),
+        postcode = Some("M1 1AA"),
+        emailAddress = Some("company@test.com"),
+        phoneNumber = Some("01611234567"),
+        mobilePhoneNumber = Some("07888888888"),
+        worksReferenceNumber = Some("COMP-001")
+      )
+
+      repo.createAndUpdateSubcontractor(request).futureValue
+
+      verify(csCreate).setString(3, "company")
+      verify(csUpdate).setString(6, "CRN-999")
+      verify(csUpdate).setNull(eqTo(7), anyInt())
+      verify(csUpdate).setNull(eqTo(8), anyInt())
+      verify(csUpdate).setNull(eqTo(9), anyInt())
+      verify(csUpdate).setNull(eqTo(10), anyInt())
+      verify(csUpdate).setNull(eqTo(11), anyInt())
+      verify(csUpdate).setString(12, "ABC Limited")
+      verify(csUpdate).setString(15, "Manchester")
+      verify(csUpdate).setString(16, "Greater Manchester")
+      verify(csUpdate).setString(17, "United Kingdom")
+      verify(csUpdate).execute()
+    }
+  }
+
+  "createMonthlyReturnItem" - {
+
+    "calls MONTHLY_RETURN_PROCS_2016.Create_Monthly_Return_Item with correct parameters and executes" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        inv.getArgument(0, classOf[Connection => Any]).apply(conn)
+      }
+
+      val call = "{ call MONTHLY_RETURN_PROCS_2016.Create_Monthly_Return_Item(?, ?, ?, ?, ?) }"
+      when(conn.prepareCall(eqTo(call))).thenReturn(cs)
+
+      val repo = new CisFormpRepository(db)
+
+      val req = CreateMonthlyReturnItemRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        resourceReference = 98765L
+      )
+
+      repo.createMonthlyReturnItem(req).futureValue mustBe ()
+
+      verify(conn).prepareCall(eqTo(call))
+      verify(cs).setString(1, "abc-123")
+      verify(cs).setInt(2, 2025)
+      verify(cs).setInt(3, 1)
+      verify(cs).setString(4, "N")
+      verify(cs).setLong(5, 98765L)
+      verify(cs).execute()
+      verify(cs).close()
+    }
+  }
+
+  "deleteMonthlyReturnItem" - {
+
+    "calls MONTHLY_RETURN_PROCS_2016.Delete_Monthly_Return_Item with correct parameters and executes" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        inv.getArgument(0, classOf[Connection => Any]).apply(conn)
+      }
+
+      val call = "{ call MONTHLY_RETURN_PROCS_2016.Delete_Monthly_Return_Item(?, ?, ?, ?, ?) }"
+      when(conn.prepareCall(eqTo(call))).thenReturn(cs)
+
+      val repo = new CisFormpRepository(db)
+
+      val req = DeleteMonthlyReturnItemRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        resourceReference = 98765L
+      )
+
+      repo.deleteMonthlyReturnItem(req).futureValue mustBe ()
+
+      verify(conn).prepareCall(eqTo(call))
+      verify(cs).setString(1, "abc-123")
+      verify(cs).setInt(2, 2025)
+      verify(cs).setInt(3, 1)
+      verify(cs).setString(4, "N")
+      verify(cs).setLong(5, 98765L)
+      verify(cs).execute()
+      verify(cs).close()
+    }
+  }
+
+  "syncMonthlyReturnItems" - {
+
+    "deletes + creates (distinct) in one transaction, validates status, and updates scheme version once" in {
+
+      val db   = mock[Database]
+      val conn = mock[Connection]
+
+      val csGetEdit   = mock[CallableStatement]
+      val csGetScheme = mock[CallableStatement]
+      val csUpdateVer = mock[CallableStatement]
+
+      val csDelete1 = mock[CallableStatement]
+      val csDelete2 = mock[CallableStatement]
+      val csCreate1 = mock[CallableStatement]
+      val csCreate2 = mock[CallableStatement]
+
+      val rsEditScheme     = mock[ResultSet]
+      val rsMonthlyReturn  = mock[ResultSet]
+      val rsItems          = mock[ResultSet]
+      val rsSubcontractors = mock[ResultSet]
+      val rsSubmission     = mock[ResultSet]
+      val rsSchemeProc     = mock[ResultSet]
+
+      when(db.withTransaction(anyArg[Connection => Any])).thenAnswer { inv =>
+        inv.getArgument(0, classOf[Connection => Any]).apply(conn)
+      }
+
+      val callGetEdit   = "{ call MONTHLY_RETURN_PROCS_2016.Get_Monthly_Return_For_Edit(?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+      val callGetScheme = "{ call SCHEME_PROCS.int_Get_Scheme(?, ?) }"
+      val callDelete    = "{ call MONTHLY_RETURN_PROCS_2016.Delete_Monthly_Return_Item(?, ?, ?, ?, ?) }"
+      val callCreate    = "{ call MONTHLY_RETURN_PROCS_2016.Create_Monthly_Return_Item(?, ?, ?, ?, ?) }"
+      val callUpdateVer = "{ call SCHEME_PROCS.Update_Version_Number(?, ?) }"
+
+      when(conn.prepareCall(eqTo(callGetEdit))).thenReturn(csGetEdit)
+      when(conn.prepareCall(eqTo(callGetScheme))).thenReturn(csGetScheme)
+      when(conn.prepareCall(eqTo(callDelete))).thenReturn(csDelete1, csDelete2)
+      when(conn.prepareCall(eqTo(callCreate))).thenReturn(csCreate1, csCreate2)
+      when(conn.prepareCall(eqTo(callUpdateVer))).thenReturn(csUpdateVer)
+
+      when(csGetEdit.getObject(eqTo(5), eqTo(classOf[ResultSet]))).thenReturn(rsEditScheme)
+      when(csGetEdit.getObject(eqTo(6), eqTo(classOf[ResultSet]))).thenReturn(rsMonthlyReturn)
+      when(csGetEdit.getObject(eqTo(7), eqTo(classOf[ResultSet]))).thenReturn(rsItems)
+      when(csGetEdit.getObject(eqTo(8), eqTo(classOf[ResultSet]))).thenReturn(rsSubcontractors)
+      when(csGetEdit.getObject(eqTo(9), eqTo(classOf[ResultSet]))).thenReturn(rsSubmission)
+
+      when(rsEditScheme.next()).thenReturn(false)
+
+      when(rsMonthlyReturn.next()).thenReturn(true, false)
+      when(rsMonthlyReturn.getLong("monthly_return_id")).thenReturn(1L)
+      when(rsMonthlyReturn.getInt("tax_year")).thenReturn(2025)
+      when(rsMonthlyReturn.getInt("tax_month")).thenReturn(1)
+      when(rsMonthlyReturn.getString("status")).thenReturn("STARTED")
+      when(rsMonthlyReturn.getLong("superseded_by")).thenReturn(0L)
+      when(rsMonthlyReturn.wasNull()).thenReturn(true)
+
+      when(rsItems.next()).thenReturn(false)
+      when(rsSubcontractors.next()).thenReturn(false)
+      when(rsSubmission.next()).thenReturn(false)
+
+      when(csGetScheme.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(rsSchemeProc)
+      when(rsSchemeProc.next()).thenReturn(true, false)
+      when(rsSchemeProc.getInt("version")).thenReturn(5)
+      when(rsSchemeProc.wasNull()).thenReturn(false)
+
+      when(csUpdateVer.getInt(2)).thenReturn(6)
+
+      val repo = new CisFormpRepository(db)
+
+      val req = SyncMonthlyReturnItemsRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        createResourceReferences = Seq(10L, 10L, 20L),
+        deleteResourceReferences = Seq(1L, 2L, 2L)
+      )
+
+      repo.syncMonthlyReturnItems(req).futureValue mustBe ()
+
+      verify(csGetEdit).execute()
+      verify(csDelete1).execute()
+      verify(csDelete2).execute()
+      verify(csCreate1).execute()
+      verify(csCreate2).execute()
+      verify(csUpdateVer).execute()
+
+      verify(conn, times(2)).prepareCall(eqTo(callDelete))
+      verify(conn, times(2)).prepareCall(eqTo(callCreate))
+      verify(conn, times(1)).prepareCall(eqTo(callUpdateVer))
+    }
+
+    "fails when monthly return status is not STARTED/VALIDATED" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+
+      val csGetEdit = mock[CallableStatement]
+
+      val rsScheme         = mock[ResultSet]
+      val rsMonthlyReturn  = mock[ResultSet]
+      val rsItems          = mock[ResultSet]
+      val rsSubcontractors = mock[ResultSet]
+      val rsSubmission     = mock[ResultSet]
+
+      when(db.withTransaction(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+
+      val callGetMonthlyReturnForEdit =
+        "{ call MONTHLY_RETURN_PROCS_2016.Get_Monthly_Return_For_Edit(?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+
+      when(conn.prepareCall(eqTo(callGetMonthlyReturnForEdit))).thenReturn(csGetEdit)
+
+      when(csGetEdit.getObject(eqTo(5), eqTo(classOf[ResultSet]))).thenReturn(rsScheme)
+      when(csGetEdit.getObject(eqTo(6), eqTo(classOf[ResultSet]))).thenReturn(rsMonthlyReturn)
+      when(csGetEdit.getObject(eqTo(7), eqTo(classOf[ResultSet]))).thenReturn(rsItems)
+      when(csGetEdit.getObject(eqTo(8), eqTo(classOf[ResultSet]))).thenReturn(rsSubcontractors)
+      when(csGetEdit.getObject(eqTo(9), eqTo(classOf[ResultSet]))).thenReturn(rsSubmission)
+
+      when(rsScheme.next()).thenReturn(false)
+
+      when(rsMonthlyReturn.next()).thenReturn(true, false)
+      when(rsMonthlyReturn.getLong("monthly_return_id")).thenReturn(1111L)
+      when(rsMonthlyReturn.getInt("tax_year")).thenReturn(2025)
+      when(rsMonthlyReturn.getInt("tax_month")).thenReturn(1)
+      when(rsMonthlyReturn.getString("status")).thenReturn("SUBMITTED")
+
+      when(rsItems.next()).thenReturn(false)
+      when(rsSubcontractors.next()).thenReturn(false)
+      when(rsSubmission.next()).thenReturn(false)
+
+      val repo = new CisFormpRepository(db)
+
+      val req = SyncMonthlyReturnItemsRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        createResourceReferences = Seq(5L),
+        deleteResourceReferences = Seq(1L)
+      )
+
+      val ex = repo.syncMonthlyReturnItems(req).failed.futureValue
+      ex.getMessage must include("Cannot sync monthly return items when status is SUBMITTED")
+    }
+  }
+
+  "getSubcontractorList" - {
+
+    "calls SUBCONTRACTOR_PROCS.Get_Subcontractor_List, parses subcontractors and closes resources" in {
+      val db       = mock[Database]
+      val conn     = mock[Connection]
+      val cs       = mock[CallableStatement]
+      val rsScheme = mock[ResultSet]
+      val rsSubs   = mock[ResultSet]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+
+      val call = "{ call SUBCONTRACTOR_PROCS.Get_Subcontractor_List(?, ?, ?) }"
+      when(conn.prepareCall(eqTo(call))).thenReturn(cs)
+
+      when(cs.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(rsScheme)
+      when(cs.getObject(eqTo(3), eqTo(classOf[ResultSet]))).thenReturn(rsSubs)
+
+      when(rsSubs.next()).thenReturn(true, false)
+
+      when(rsSubs.getLong("subcontractor_id")).thenReturn(1L)
+      when(rsSubs.getInt("subbie_resource_ref")).thenReturn(10)
+      when(rsSubs.getString("type")).thenReturn("soletrader")
+
+      when(rsSubs.getString("utr")).thenReturn("1234567890")
+      when(rsSubs.getInt("page_visited")).thenReturn(2)
+      when(rsSubs.wasNull()).thenReturn(false)
+      when(rsSubs.getString("partner_utr")).thenReturn(null)
+      when(rsSubs.getString("crn")).thenReturn(null)
+      when(rsSubs.getString("firstname")).thenReturn("John")
+      when(rsSubs.getString("nino")).thenReturn("AA123456A")
+      when(rsSubs.getString("secondname")).thenReturn(null)
+      when(rsSubs.getString("surname")).thenReturn("Smith")
+      when(rsSubs.getString("partnership_tradingname")).thenReturn(null)
+      when(rsSubs.getString("tradingname")).thenReturn("ACME")
+
+      when(rsSubs.getString("address_line_1")).thenReturn("1 Main Street")
+      when(rsSubs.getString("address_line_2")).thenReturn(null)
+      when(rsSubs.getString("address_line_3")).thenReturn(null)
+      when(rsSubs.getString("address_line_4")).thenReturn(null)
+      when(rsSubs.getString("country")).thenReturn("United Kingdom")
+      when(rsSubs.getString("postcode")).thenReturn("AA1 1AA")
+      when(rsSubs.getString("email_address")).thenReturn(null)
+      when(rsSubs.getString("phone_number")).thenReturn(null)
+      when(rsSubs.getString("mobile_phone_number")).thenReturn(null)
+      when(rsSubs.getString("works_reference_number")).thenReturn(null)
+
+      when(rsSubs.getInt("version")).thenReturn(1)
+      when(rsSubs.wasNull()).thenReturn(false)
+      when(rsSubs.getString("tax_treatment")).thenReturn(null)
+      when(rsSubs.getString("updated_tax_treatment")).thenReturn(null)
+      when(rsSubs.getString("verification_number")).thenReturn(null)
+
+      when(rsSubs.getTimestamp("create_date")).thenReturn(Timestamp.valueOf("2026-01-10 09:00:00"))
+      when(rsSubs.getTimestamp("last_update")).thenReturn(Timestamp.valueOf("2026-01-11 10:00:00"))
+      when(rsSubs.getString("matched")).thenReturn(null)
+      when(rsSubs.getString("verified")).thenReturn(null)
+      when(rsSubs.getString("auto_verified")).thenReturn(null)
+      when(rsSubs.getTimestamp("verification_date")).thenReturn(null)
+      when(rsSubs.getTimestamp("last_monthly_return_date")).thenReturn(null)
+
+      when(rsSubs.getInt("pending_verifications")).thenReturn(0)
+      when(rsSubs.wasNull()).thenReturn(false)
+
+      val repo = new CisFormpRepository(db)
+
+      val out = repo.getSubcontractorList("cis-123").futureValue
+
+      out.subcontractors must have size 1
+      val s = out.subcontractors.head
+      println(out.subcontractors.head)
+      s.subcontractorId mustBe 1L
+      s.subcontractorType mustBe Some("soletrader")
+      s.utr mustBe Some("1234567890")
+      s.pageVisited mustBe Some(2)
+      s.firstName mustBe Some("John")
+      s.nino mustBe Some("AA123456A")
+      s.surname mustBe Some("Smith")
+      s.tradingName mustBe Some("ACME")
+      s.addressLine1 mustBe Some("1 Main Street")
+      s.country mustBe Some("United Kingdom")
+      s.postCode mustBe Some("AA1 1AA")
+      s.version mustBe Some(1)
+      s.createDate mustBe Some(LocalDateTime.of(2026, 1, 10, 9, 0, 0))
+      s.lastUpdate mustBe Some(LocalDateTime.of(2026, 1, 11, 10, 0, 0))
+      s.pendingVerifications mustBe Some(0)
+
+      verify(conn).prepareCall(eqTo(call))
+      verify(cs).setString(1, "cis-123")
+      verify(cs).registerOutParameter(2, OracleTypes.CURSOR)
+      verify(cs).registerOutParameter(3, OracleTypes.CURSOR)
+      verify(cs).execute()
+
+      verify(rsScheme).close()
+      verify(rsSubs).close()
+      verify(cs).close()
+    }
+
+    "returns empty list when subcontractor cursor is null" in {
+      val db       = mock[Database]
+      val conn     = mock[Connection]
+      val cs       = mock[CallableStatement]
+      val rsScheme = mock[ResultSet]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+
+      val call = "{ call SUBCONTRACTOR_PROCS.Get_Subcontractor_List(?, ?, ?) }"
+      when(conn.prepareCall(eqTo(call))).thenReturn(cs)
+
+      when(cs.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(rsScheme)
+      when(cs.getObject(eqTo(3), eqTo(classOf[ResultSet]))).thenReturn(null)
+
+      val repo = new CisFormpRepository(db)
+
+      val out = repo.getSubcontractorList("cis-123").futureValue
+      out.subcontractors mustBe empty
+
+      verify(cs).execute()
+      verify(rsScheme).close()
+      verify(cs).close()
+    }
+  }
+
+  "getGovTalkStatus" - {
+
+    "must return one record and close resources" in {
+      val db        = mock[Database]
+      val conn      = mock[Connection]
+      val cs        = mock[CallableStatement]
+      val rsRecords = mock[ResultSet]
+
+      when(db.withConnection(anyArg[java.sql.Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
+      }
+      when(conn.prepareCall(anyArg[String])).thenReturn(cs)
+
+      when(cs.getObject(eqTo(3), eqTo(classOf[ResultSet]))).thenReturn(rsRecords)
+
+      when(rsRecords.next()).thenReturn(true, false)
+      when(rsRecords.getString("user_identifier")).thenReturn("12")
+      when(rsRecords.getString("formResultId")).thenReturn("123abc")
+      when(rsRecords.getString("correlationid")).thenReturn("abc123qwe")
+      when(rsRecords.getString("form_lock")).thenReturn("N")
+      when(rsRecords.getTimestamp("create_timestamp")).thenReturn(Timestamp.valueOf("2026-04-05 12:34:56"))
+      when(rsRecords.getTimestamp("endstate_timestamp")).thenReturn(null)
+      when(rsRecords.getTimestamp("last_mesg_timestamp")).thenReturn(Timestamp.valueOf("2026-04-05 12:34:56"))
+      when(rsRecords.getInt("num_polls")).thenReturn(0)
+      when(rsRecords.getInt("poll_interval")).thenReturn(0)
+      when(rsRecords.getString("protocol_status")).thenReturn("dataRequest")
+      when(rsRecords.getString("gatewayurl")).thenReturn("www.test.com")
+
+      val repo   = new CisFormpRepository(db)
+      val result = repo.getGovTalkStatus(GetGovTalkStatusRequest("12", "123abc")).futureValue
+
+      result.govtalk_status must have size 1
+      val record = result.govtalk_status.head
+      record.userIdentifier mustBe "12"
+      record.formResultID mustBe "123abc"
+      record.correlationID mustBe "abc123qwe"
+      record.formLock mustBe "N"
+      record.createDate mustBe Some(Timestamp.valueOf("2026-04-05 12:34:56").toLocalDateTime)
+      record.endStateDate mustBe None
+      record.lastMessageDate mustBe Timestamp.valueOf("2026-04-05 12:34:56").toLocalDateTime
+      record.numPolls mustBe 0
+      record.pollInterval mustBe 0
+      record.protocolStatus mustBe "dataRequest"
+      record.gatewayURL mustBe "www.test.com"
+
+      verify(conn).prepareCall("{ call SUBMISSION_ADMIN.SelectGovTalkStatus(?, ?, ?) }")
+      verify(cs).execute()
+    }
+
+    "must return empty record list when no rows" in {
+      val db        = mock[Database]
+      val conn      = mock[Connection]
+      val cs        = mock[CallableStatement]
+      val rsRecords = mock[ResultSet]
+
+      when(db.withConnection(anyArg[java.sql.Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[java.sql.Connection => Any]); f(conn)
+      }
+
+      when(conn.prepareCall(anyArg[String])).thenReturn(cs)
+
+      when(cs.getObject(3, classOf[ResultSet])).thenReturn(rsRecords)
+      when(rsRecords.next()).thenReturn(false)
+
+      val repo   = new CisFormpRepository(db)
+      val result = repo.getGovTalkStatus(GetGovTalkStatusRequest("12", "123abc")).futureValue
+
+      result.govtalk_status mustBe empty
+
+      verify(conn).prepareCall("{ call SUBMISSION_ADMIN.SelectGovTalkStatus(?, ?, ?) }")
+      verify(cs).registerOutParameter(3, OracleTypes.CURSOR)
+      verify(cs).execute()
+    }
+  }
+
+  "updateGovTalkStatusCorrelationId" - {
+
+    "calls CallUpdateGetGovTalkStatusCorrelationId SP with correct params and executes" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+
+      val call = "{ call SUBMISSION_ADMIN.UpdateGovTalkStatusCorr(?, ?, ?, ?, ?) }"
+      when(conn.prepareCall(eqTo(call))).thenReturn(cs)
+
+      val repo = new CisFormpRepository(db)
+
+      val req = UpdateGovTalkStatusCorrelationIdRequest(
+        userIdentifier = "1",
+        formResultID = "12890",
+        correlationID = "C742D5DEE7EB4D15B4F7EFD50B890525",
+        pollInterval = 1,
+        gatewayURL = "http://example.com"
+      )
+
+      repo.updateGovTalkStatusCorrelationId(req).futureValue mustBe ()
+
+      verify(conn).prepareCall(eqTo(call))
+      verify(cs).setString(1, "1")
+      verify(cs).setString(2, "12890")
+      verify(cs).setString(3, "C742D5DEE7EB4D15B4F7EFD50B890525")
+      verify(cs).setInt(4, 1)
+      verify(cs).setString(5, "http://example.com")
+      verify(cs).execute()
+      verify(cs).close()
+    }
+  }
+
+  "resetGovTalkStatus" - {
+
+    "call SUBMISSION_ADMIN.ResetGovTalkStatusRecord with correct parameters and execute" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+
+      val call =
+        "{ call SUBMISSION_ADMIN.ResetGovTalkStatusRecord(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+
+      when(conn.prepareCall(eqTo(call))).thenReturn(cs)
+
+      val repo = new CisFormpRepository(db)
+
+      val request = ResetGovTalkStatusRequest(
+        userIdentifier = "1",
+        formResultID = "12890",
+        oldProtocolStatus = "dataRequest",
+        gatewayURL = "http://baseurl.com/submission/ChRIS/CISR/Filing/sync/CIS300MR"
+      )
+
+      repo.resetGovTalkStatus(request).futureValue
+
+      val tsCaptorCreateDate      = ArgumentCaptor.forClass(classOf[Timestamp])
+      val tsCaptorLastMessageDate = ArgumentCaptor.forClass(classOf[Timestamp])
+
+      verify(conn).prepareCall(eqTo(call))
+
+      verify(cs).setString(1, request.userIdentifier)
+      verify(cs).setString(2, request.formResultID)
+      verify(cs).setString(3, "empty")
+      verify(cs).setString(4, "N")
+      verify(cs).setTimestamp(eqTo(5), tsCaptorCreateDate.capture())
+      verify(cs).setNull(6, Types.TIMESTAMP)
+      verify(cs).setTimestamp(eqTo(7), tsCaptorLastMessageDate.capture())
+      verify(cs).setInt(8, 0)
+      verify(cs).setInt(9, 0)
+      verify(cs).setString(10, request.oldProtocolStatus)
+      verify(cs).setString(11, "initial")
+      verify(cs).setString(12, request.gatewayURL)
+
+      verify(cs).execute()
+      verify(cs).close()
+
+      tsCaptorCreateDate.getValue      must not be null
+      tsCaptorLastMessageDate.getValue must not be null
+    }
+  }
+
+  "updateGovTalkStatus" - {
+
+    "call SUBMISSION_ADMIN.UpdateGovtalkStatus with correct parameters and execute" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+
+      val call =
+        "{ call SUBMISSION_ADMIN.UpdateGovtalkStatus(?, ?, ?, ?) }"
+
+      when(conn.prepareCall(eqTo(call))).thenReturn(cs)
+
+      val repo = new CisFormpRepository(db)
+
+      val request = UpdateGovTalkStatusRequest(
+        userIdentifier = "1",
+        formResultID = "12890",
+        endStateDate = LocalDateTime.parse("2026-02-13T00:00:00"),
+        protocolStatus = "dataRequest"
+      )
+
+      repo.updateGovTalkStatus(request).futureValue
+
+      verify(conn).prepareCall(eqTo(call))
+
+      verify(cs).setString(1, request.userIdentifier)
+      verify(cs).setString(2, request.formResultID)
+      verify(cs).setString(3, request.protocolStatus)
+      verify(cs).setTimestamp(4, java.sql.Timestamp.valueOf(request.endStateDate))
+
+      verify(cs).execute()
+      verify(cs).close()
+    }
+  }
+
+  "createGovTalkStatusRecord" - {
+
+    "call SUBMISSION_ADMIN.InsertInitialGovTalkStatus with correct parameters and execute" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+      val cs   = mock[CallableStatement]
+
+      when(db.withConnection(anyArg[Connection => Any])).thenAnswer { inv =>
+        val f = inv.getArgument(0, classOf[Connection => Any]); f(conn)
+      }
+
+      val call =
+        "{ call SUBMISSION_ADMIN.InsertInitialGovTalkStatus(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+
+      when(conn.prepareCall(eqTo(call))).thenReturn(cs)
+
+      val repo = new CisFormpRepository(db)
+
+      val request = CreateGovTalkStatusRecordRequest(
+        userIdentifier = "1",
+        formResultID = "12890",
+        correlationID = "C742D5DEE7EB4D15B4F7EFD50B890525",
+        gatewayURL = "http://localhost:9712/submission/ChRIS/CISR/Filing/sync/CIS300MR"
+      )
+
+      repo.createGovTalkStatusRecord(request).futureValue
+
+      val tsCaptorCreateDate      = ArgumentCaptor.forClass(classOf[Timestamp])
+      val tsCaptorLastMessageDate = ArgumentCaptor.forClass(classOf[Timestamp])
+
+      verify(conn).prepareCall(eqTo(call))
+
+      verify(cs).setString(1, request.userIdentifier)
+      verify(cs).setString(2, request.formResultID)
+      verify(cs).setString(3, request.correlationID)
+      verify(cs).setString(4, "N")
+      verify(cs).setTimestamp(eqTo(5), tsCaptorCreateDate.capture())
+      verify(cs).setNull(6, Types.TIMESTAMP)
+      verify(cs).setTimestamp(eqTo(7), tsCaptorLastMessageDate.capture())
+      verify(cs).setInt(8, 0)
+      verify(cs).setInt(9, 0)
+      verify(cs).setString(10, "initial")
+      verify(cs).setString(11, request.gatewayURL)
+
+      verify(cs).execute()
+      verify(cs).close()
+
+      tsCaptorCreateDate.getValue      must not be null
+      tsCaptorLastMessageDate.getValue must not be null
+    }
+  }
+
+  "updateMonthlyReturnItem" - {
+
+    "call Update_Monthly_Return_Item and Update_Scheme_Version SPs in transaction" in {
+      val db   = mock[Database]
+      val conn = mock[Connection]
+
+      val csGetScheme  = mock[CallableStatement]
+      val rsScheme     = mock[ResultSet]
+      val csUpdateItem = mock[CallableStatement]
+      val csUpdateVer  = mock[CallableStatement]
+
+      when(db.withTransaction(anyArg[Connection => Any])).thenAnswer { inv =>
+        inv.getArgument(0, classOf[Connection => Any]).apply(conn)
+      }
+
+      when(conn.prepareCall(eqTo("{ call SCHEME_PROCS.int_Get_Scheme(?, ?) }")))
+        .thenReturn(csGetScheme)
+
+      when(csGetScheme.getObject(eqTo(2), eqTo(classOf[ResultSet]))).thenReturn(rsScheme)
+
+      when(rsScheme.next()).thenReturn(true, false)
+      when(rsScheme.getInt("version")).thenReturn(69)
+      when(rsScheme.wasNull()).thenReturn(false)
+
+      val updateItemCall =
+        "{ call MONTHLY_RETURN_PROCS_2016.Update_Monthly_Return_Item(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+      when(conn.prepareCall(eqTo(updateItemCall))).thenReturn(csUpdateItem)
+
+      val updateVersionCall = "{ call SCHEME_PROCS.Update_Version_Number(?, ?) }"
+      when(conn.prepareCall(eqTo(updateVersionCall))).thenReturn(csUpdateVer)
+      when(csUpdateVer.getInt(2)).thenReturn(70)
+
+      val repo = new CisFormpRepository(db)
+
+      val req = UpdateMonthlyReturnItemRequest(
+        instanceId = "1",
+        taxYear = 2015,
+        taxMonth = 4,
+        amendment = "N",
+        itemResourceReference = 9L,
+        totalPayments = "1000.00",
+        costOfMaterials = "100.00",
+        totalDeducted = "100.00",
+        subcontractorName = "Charles, C",
+        verificationNumber = Some("V1000000009")
+      )
+
+      repo.updateMonthlyReturnItem(req).futureValue mustBe (())
+
+      verify(csGetScheme).setString(1, "1")
+      verify(csGetScheme).execute()
+
+      verify(conn).prepareCall(eqTo(updateItemCall))
+      verify(csUpdateItem).setString(1, "1")
+      verify(csUpdateItem).setInt(2, 2015)
+      verify(csUpdateItem).setInt(3, 4)
+
+      verify(csUpdateItem).setString(4, "N")
+
+      verify(csUpdateItem).setLong(5, 9L)
+      verify(csUpdateItem).setString(6, "1000.00")
+      verify(csUpdateItem).setString(7, "100.00")
+      verify(csUpdateItem).setString(8, "100.00")
+      verify(csUpdateItem).setString(9, "Charles, C")
+      verify(csUpdateItem).setOptionalString(10, Some("V1000000009"))
+
+      verify(csUpdateItem).setNull(11, Types.INTEGER)
+      verify(csUpdateItem).registerOutParameter(11, Types.INTEGER)
+
+      verify(csUpdateItem).execute()
+
+      verify(conn).prepareCall(eqTo(updateVersionCall))
+      verify(csUpdateVer).setString(1, "1")
+      verify(csUpdateVer).setInt(2, 69)
+      verify(csUpdateVer).registerOutParameter(2, Types.INTEGER)
+      verify(csUpdateVer).execute()
+      verify(csUpdateVer).getInt(2)
+
+      verify(rsScheme).close()
+      verify(csGetScheme).close()
+      verify(csUpdateItem).close()
+      verify(csUpdateVer).close()
     }
   }
 }

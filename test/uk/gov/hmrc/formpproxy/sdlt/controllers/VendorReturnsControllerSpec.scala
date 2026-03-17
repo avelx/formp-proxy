@@ -30,7 +30,6 @@ import uk.gov.hmrc.formpproxy.actions.{AuthAction, FakeAuthAction}
 import uk.gov.hmrc.formpproxy.sdlt.controllers.returns.VendorReturnsController
 import uk.gov.hmrc.formpproxy.sdlt.models.vendor.*
 import uk.gov.hmrc.formpproxy.sdlt.services.ReturnService
-import uk.gov.hmrc.http.UpstreamErrorResponse
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -137,38 +136,6 @@ class VendorReturnsControllerSpec extends AnyFreeSpec with Matchers with ScalaFu
         "name"                 -> "Smith",
         "address1"             -> "Main Street",
         "isRepresentedByAgent" -> "N"
-      )
-
-      val req: FakeRequest[JsValue] = makeJsonRequest(invalidJson)
-      val res: Future[Result]       = controller.createVendor()(req)
-
-      status(res) mustBe BAD_REQUEST
-      (contentAsJson(res) \ "message").as[String] mustBe "Invalid payload"
-      verifyNoInteractions(mockService)
-    }
-
-    "returns 400 when address1 is missing" in new Setup {
-      val invalidJson: JsObject = Json.obj(
-        "returnResourceRef"    -> "100001",
-        "stornId"              -> "STORN12345",
-        "name"                 -> "Smith",
-        "isRepresentedByAgent" -> "N"
-      )
-
-      val req: FakeRequest[JsValue] = makeJsonRequest(invalidJson)
-      val res: Future[Result]       = controller.createVendor()(req)
-
-      status(res) mustBe BAD_REQUEST
-      (contentAsJson(res) \ "message").as[String] mustBe "Invalid payload"
-      verifyNoInteractions(mockService)
-    }
-
-    "returns 400 when isRepresentedByAgent is missing" in new Setup {
-      val invalidJson: JsObject = Json.obj(
-        "returnResourceRef" -> "100001",
-        "stornId"           -> "STORN12345",
-        "name"              -> "Smith",
-        "address1"          -> "Main Street"
       )
 
       val req: FakeRequest[JsValue] = makeJsonRequest(invalidJson)

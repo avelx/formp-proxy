@@ -1,0 +1,292 @@
+/*
+ * Copyright 2026 HM Revenue & Customs
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package uk.gov.hmrc.formpproxy.cis.models.requests
+
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.wordspec.AnyWordSpec
+import play.api.libs.json.{JsError, JsObject, Json}
+import uk.gov.hmrc.formpproxy.cis.models.{Company, Partnership, SoleTrader}
+
+class CreateAndUpdateSubcontractorRequestSpec extends AnyWordSpec with Matchers {
+
+  "CreateAndUpdateSubcontractorRequest (JSON)" should {
+
+    "read and write with required fields only (soletrader)" in {
+      val json = Json.parse(
+        """
+          |{
+          |  "cisId": "1234567890",
+          |  "subcontractorType": "soletrader"
+          |}
+          |""".stripMargin
+      )
+
+      val model = json.as[CreateAndUpdateSubcontractorRequest]
+      model mustBe CreateAndUpdateSubcontractorRequest.SoleTraderRequest(
+        cisId = "1234567890",
+        subcontractorType = SoleTrader
+      )
+
+      Json.toJson(model) mustBe json
+    }
+
+    "read and write with required fields only (company)" in {
+      val json = Json.parse(
+        """
+          |{
+          |  "cisId": "1234567890",
+          |  "subcontractorType": "company"
+          |}
+          |""".stripMargin
+      )
+
+      val model = json.as[CreateAndUpdateSubcontractorRequest]
+      model mustBe CreateAndUpdateSubcontractorRequest.CompanyRequest(
+        cisId = "1234567890",
+        subcontractorType = Company
+      )
+
+      Json.toJson(model) mustBe json
+    }
+
+    "read and write with required fields only (partnership)" in {
+      val json = Json.parse(
+        """
+          |{
+          |  "cisId": "1234567890",
+          |  "subcontractorType": "partnership"
+          |}
+          |""".stripMargin
+      )
+
+      val model = json.as[CreateAndUpdateSubcontractorRequest]
+      model mustBe CreateAndUpdateSubcontractorRequest.PartnershipRequest(
+        cisId = "1234567890",
+        subcontractorType = Partnership
+      )
+
+      Json.toJson(model) mustBe json
+    }
+
+    "should fail to read when subcontractorType is unsupported" in {
+      val json = Json.parse("""{ "cisId": "CIS-123", "subcontractorType": "banana" }""")
+
+      val result = json.validate[CreateAndUpdateSubcontractorRequest]
+      result.isError mustBe true
+
+      val msg = result match {
+        case JsError(errs) => errs.flatMap(_._2).flatMap(_.messages).mkString(" | ")
+        case _             => fail("Expected JsError")
+      }
+
+      msg must include("Unsupported subcontractorType: banana")
+    }
+
+    "round-trip (write then read) with all fields populated (soletrader)" in {
+      val model: CreateAndUpdateSubcontractorRequest =
+        CreateAndUpdateSubcontractorRequest.SoleTraderRequest(
+          cisId = "1234567890",
+          subcontractorType = SoleTrader,
+          utr = Some("1234567890"),
+          nino = Some("AA123456A"),
+          firstName = Some("John"),
+          secondName = Some("Q"),
+          surname = Some("Smith"),
+          tradingName = Some("ACME"),
+          addressLine1 = Some("1 Main Street"),
+          addressLine2 = Some("Line 2"),
+          city = Some("London"),
+          county = Some("Greater London"),
+          country = Some("United Kingdom"),
+          postcode = Some("AA1 1AA"),
+          emailAddress = Some("test@test.com"),
+          phoneNumber = Some("01234567890"),
+          mobilePhoneNumber = Some("07123456789"),
+          worksReferenceNumber = Some("WRN-123")
+        )
+
+      val json = Json.parse(
+        """{
+          | "cisId":"1234567890",
+          | "subcontractorType":"soletrader",
+          | "utr":"1234567890",
+          | "nino":"AA123456A",
+          | "firstName":"John",
+          | "secondName":"Q",
+          | "surname":"Smith",
+          | "tradingName":"ACME",
+          | "addressLine1":"1 Main Street",
+          | "addressLine2":"Line 2",
+          | "city":"London",
+          | "county":"Greater London",
+          | "country":"United Kingdom",
+          | "postcode":"AA1 1AA",
+          | "emailAddress":"test@test.com",
+          | "phoneNumber":"01234567890",
+          | "mobilePhoneNumber":"07123456789",
+          | "worksReferenceNumber":"WRN-123"
+          |}""".stripMargin
+      )
+
+      json.as[CreateAndUpdateSubcontractorRequest] mustBe model
+      Json.toJson(model) mustBe json
+    }
+
+    "round-trip (write then read) with all fields populated (company)" in {
+      val model: CreateAndUpdateSubcontractorRequest =
+        CreateAndUpdateSubcontractorRequest.CompanyRequest(
+          cisId = "1234567890",
+          subcontractorType = Company,
+          utr = Some("1234567890"),
+          crn = Some("CRN123"),
+          tradingName = Some("ACME LTD"),
+          addressLine1 = Some("1 Main Street"),
+          addressLine2 = Some("Line 2"),
+          city = Some("London"),
+          county = Some("Greater London"),
+          country = Some("United Kingdom"),
+          postcode = Some("AA1 1AA"),
+          emailAddress = Some("test@test.com"),
+          phoneNumber = Some("01234567890"),
+          mobilePhoneNumber = Some("07123456789"),
+          worksReferenceNumber = Some("WRN-123")
+        )
+
+      val json = Json.parse(
+        """{
+          | "cisId":"1234567890",
+          | "subcontractorType":"company",
+          | "utr":"1234567890",
+          | "crn":"CRN123",
+          | "tradingName":"ACME LTD",
+          | "addressLine1":"1 Main Street",
+          | "addressLine2":"Line 2",
+          | "city":"London",
+          | "county":"Greater London",
+          | "country":"United Kingdom",
+          | "postcode":"AA1 1AA",
+          | "emailAddress":"test@test.com",
+          | "phoneNumber":"01234567890",
+          | "mobilePhoneNumber":"07123456789",
+          | "worksReferenceNumber":"WRN-123"
+          |}""".stripMargin
+      )
+
+      json.as[CreateAndUpdateSubcontractorRequest] mustBe model
+      Json.toJson(model) mustBe json
+    }
+
+    "round-trip (write then read) with all fields populated (partnership)" in {
+      val model: CreateAndUpdateSubcontractorRequest =
+        CreateAndUpdateSubcontractorRequest.PartnershipRequest(
+          cisId = "1234567890",
+          subcontractorType = Partnership,
+          utr = Some("1234567890"),
+          partnerUtr = Some("9999999999"),
+          partnershipTradingName = Some("My Partnership"),
+          tradingName = Some("Nominated Partner"),
+          addressLine1 = Some("1 Main Street"),
+          addressLine2 = Some("Line 2"),
+          city = Some("London"),
+          county = Some("Greater London"),
+          country = Some("United Kingdom"),
+          postcode = Some("AA1 1AA"),
+          emailAddress = Some("test@test.com"),
+          phoneNumber = Some("01234567890"),
+          mobilePhoneNumber = Some("07123456789"),
+          worksReferenceNumber = Some("WRN-123")
+        )
+
+      val json = Json.parse(
+        """{
+          | "cisId":"1234567890",
+          | "subcontractorType":"partnership",
+          | "utr":"1234567890",
+          | "partnerUtr":"9999999999",
+          | "partnershipTradingName":"My Partnership",
+          | "tradingName":"Nominated Partner",
+          | "addressLine1":"1 Main Street",
+          | "addressLine2":"Line 2",
+          | "city":"London",
+          | "county":"Greater London",
+          | "country":"United Kingdom",
+          | "postcode":"AA1 1AA",
+          | "emailAddress":"test@test.com",
+          | "phoneNumber":"01234567890",
+          | "mobilePhoneNumber":"07123456789",
+          | "worksReferenceNumber":"WRN-123"
+          |}""".stripMargin
+      )
+
+      json.as[CreateAndUpdateSubcontractorRequest] mustBe model
+      Json.toJson(model) mustBe json
+    }
+
+    "fail to read when cisId is missing" in {
+      val json = Json.parse(
+        """
+          |{
+          |  "subcontractorType": "soletrader"
+          |}
+          |""".stripMargin
+      )
+
+      json.validate[CreateAndUpdateSubcontractorRequest].isError mustBe true
+    }
+
+    "fail to read when subcontractorType is missing" in {
+      val json = Json.parse(
+        """
+          |{
+          |  "cisId": "1234567890"
+          |}
+          |""".stripMargin
+      )
+
+      json.validate[CreateAndUpdateSubcontractorRequest].isError mustBe true
+    }
+
+    "fail to read subcontractorType with wrong value" in {
+      val json = Json.parse(
+        """
+          |{
+          |  "cisId": "1234567890",
+          |  "subcontractorType": "invalid type"
+          |}
+          |""".stripMargin
+      )
+
+      json.validate[CreateAndUpdateSubcontractorRequest].isError mustBe true
+    }
+
+    "omit None fields when writing JSON (example: company minimal)" in {
+      val model: CreateAndUpdateSubcontractorRequest =
+        CreateAndUpdateSubcontractorRequest.CompanyRequest(
+          cisId = "CIS-omit-nones",
+          subcontractorType = Company
+        )
+
+      val json = Json.toJson(model).as[JsObject]
+
+      json.keys must contain allOf ("cisId", "subcontractorType")
+      json.keys must not contain "utr"
+      json.keys must not contain "crn"
+      json.keys must not contain "postcode"
+      json.keys must not contain "emailAddress"
+    }
+  }
+}

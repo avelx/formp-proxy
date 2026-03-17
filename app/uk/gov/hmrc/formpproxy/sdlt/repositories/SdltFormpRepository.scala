@@ -20,11 +20,13 @@ import oracle.jdbc.OracleTypes
 import play.api.Logging
 import play.api.db.{Database, NamedDatabase}
 import uk.gov.hmrc.formpproxy.sdlt.models.*
-import uk.gov.hmrc.formpproxy.sdlt.models.agent.*
 import uk.gov.hmrc.formpproxy.sdlt.models.agents.*
 import uk.gov.hmrc.formpproxy.sdlt.models.organisation.*
 import uk.gov.hmrc.formpproxy.sdlt.models.returns.{ReturnSummary, SdltReturnRecordResponse}
 import uk.gov.hmrc.formpproxy.sdlt.models.vendor.*
+import uk.gov.hmrc.formpproxy.sdlt.models.purchaser.*
+import uk.gov.hmrc.formpproxy.sdlt.models.land.*
+import uk.gov.hmrc.formpproxy.shared.utils.CallableStatementUtils.*
 
 import java.lang.Long
 import java.sql.{CallableStatement, Connection, ResultSet, Types}
@@ -45,8 +47,19 @@ trait SdltSource {
   def sdltDeleteReturnAgent(request: DeleteReturnAgentRequest): Future[DeleteReturnAgentReturn]
   def sdltUpdateReturnVersion(request: ReturnVersionUpdateRequest): Future[ReturnVersionUpdateReturn]
   def sdltGetOrganisation(req: String): Future[GetSdltOrgRequest]
+  def sdltUpdatePredefinedAgent(req: UpdatePredefinedAgentRequest): Future[UpdatePredefinedAgentResponse]
   def sdltCreatePredefinedAgent(request: CreatePredefinedAgentRequest): Future[CreatePredefinedAgentResponse]
   def sdltDeletePredefinedAgent(req: DeletePredefinedAgentRequest): Future[DeletePredefinedAgentResponse]
+  def sdltCreatePurchaser(request: CreatePurchaserRequest): Future[CreatePurchaserReturn]
+  def sdltUpdatePurchaser(request: UpdatePurchaserRequest): Future[UpdatePurchaserReturn]
+  def sdltDeletePurchaser(request: DeletePurchaserRequest): Future[DeletePurchaserReturn]
+  def sdltCreateCompanyDetails(request: CreateCompanyDetailsRequest): Future[CreateCompanyDetailsReturn]
+  def sdltUpdateCompanyDetails(request: UpdateCompanyDetailsRequest): Future[UpdateCompanyDetailsReturn]
+  def sdltDeleteCompanyDetails(request: DeleteCompanyDetailsRequest): Future[DeleteCompanyDetailsReturn]
+  def sdltCreateLand(request: CreateLandRequest): Future[CreateLandReturn]
+  def sdltUpdateLand(request: UpdateLandRequest): Future[UpdateLandReturn]
+  def sdltDeleteLand(request: DeleteLandRequest): Future[DeleteLandReturn]
+  def sdltUpdateReturn(request: UpdateReturnRequest): Future[UpdateReturnReturn]
 }
 
 private final case class SchemeRow(schemeId: Long, version: Option[Int], email: Option[String])
@@ -125,30 +138,18 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
       cs.setString(1, p_storn)
       cs.setString(2, p_purchaser_is_company)
       cs.setString(3, p_surname_comp_name)
-      setOptionalString(cs, 4, p_land_house_number)
+      cs.setOptionalString(4, p_land_house_number)
       cs.setString(5, p_land_address_1)
-      setOptionalString(cs, 6, p_land_address_2)
-      setOptionalString(cs, 7, p_land_address_3)
-      setOptionalString(cs, 8, p_land_address_4)
-      setOptionalString(cs, 9, p_land_postcode)
+      cs.setOptionalString(6, p_land_address_2)
+      cs.setOptionalString(7, p_land_address_3)
+      cs.setOptionalString(8, p_land_address_4)
+      cs.setOptionalString(9, p_land_postcode)
       cs.setString(10, p_transaction_type)
       cs.registerOutParameter(11, Types.NUMERIC)
       cs.execute()
       cs.getLong(11)
     } finally cs.close()
   }
-
-  private def setOptionalString(cs: CallableStatement, index: Int, value: Option[String]): Unit =
-    value match {
-      case Some(v) if v != null => cs.setString(index, v)
-      case _                    => cs.setNull(index, Types.VARCHAR)
-    }
-
-  private def setOptionalInt(cs: CallableStatement, index: Int, value: Option[Int]): Unit =
-    value match {
-      case Some(v) => cs.setInt(index, v)
-      case None    => cs.setNull(index, Types.NUMERIC)
-    }
 
   override def sdltGetReturn(returnResourceRef: String, storn: String): Future[GetReturnRequest] = {
     logger.info(s"[SDLT] sdltGetReturn(returnResourceRef=$returnResourceRef, storn=$storn)")
@@ -186,7 +187,7 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
           val lands                  = processResultSetSeq(cs, 8, processLand)
           val transaction            = processResultSet(cs, 9, processTransaction)
           val returnAgents           = processResultSetSeq(cs, 10, processReturnAgent)
-          val agent                  = processResultSet(cs, 11, processAgent)
+          val agent                  = processResultSetSeq(cs, 11, processAgent)
           val lease                  = processResultSet(cs, 12, processLease)
           val taxCalculation         = processResultSet(cs, 13, processTaxCalculation)
           val submission             = processResultSet(cs, 14, processSubmission)
@@ -204,7 +205,7 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
             land = if (lands.isEmpty) None else Some(lands),
             transaction = transaction,
             returnAgent = if (returnAgents.isEmpty) None else Some(returnAgents),
-            agent = agent,
+            agent = if (agent.isEmpty) None else Some(agent),
             lease = lease,
             taxCalculation = taxCalculation,
             submission = submission,
@@ -229,17 +230,18 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
           cs.setNull(2, Types.VARCHAR) // p_utrn
           cs.setNull(3, Types.VARCHAR) // p_min_letter
           cs.setNull(4, Types.VARCHAR) // p_max_letter
-          setOptionalString(cs, 5, request.status) // p_status
+          cs.setOptionalString(5, request.status) // p_status
           cs.setNull(6, Types.VARCHAR)
           if (request.deletionFlag) {
             cs.setString(7, "TRUE")
           } else {
             cs.setString(7, "FALSE")
           }
-          cs.setString(8, "1") // p_order
-          cs.setString(9, "ASC") // p_order_by
+          val (order, orderBy)                      = request.sortSpec
+          cs.setString(8, order) // p_order
+          cs.setString(9, orderBy) // p_order_by
           cs.setLong(10, request.pageNumber.map(_.toLong).getOrElse(1L))
-          setOptionalString(cs, 11, request.pageType)
+          cs.setOptionalString(11, request.pageType)
           // Output
           cs.registerOutParameter(12, OracleTypes.CURSOR)
           cs.registerOutParameter(13, OracleTypes.NUMERIC)
@@ -420,28 +422,42 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
       DARPostcode = None
     )
 
+  private def getBigDecimalSafely(rs: ResultSet, columnName: String): Option[BigDecimal] =
+    Option(rs.getString(columnName)).flatMap { value =>
+      val trimmed = value.trim
+      if (trimmed.isEmpty) {
+        None
+      } else {
+        try
+          Some(BigDecimal(trimmed))
+        catch {
+          case _: NumberFormatException => None
+        }
+      }
+    }
+
   private def processTransaction(rs: ResultSet): Transaction =
     Transaction(
       transactionID = Option(rs.getString("TRANSACTION_ID")),
       returnID = Option(rs.getString("RETURN_ID")),
       claimingRelief = Option(rs.getString("CLAIMING_RELIEF")),
-      reliefAmount = Option(rs.getBigDecimal("RELIEF_AMOUNT")).map(BigDecimal(_)),
+      reliefAmount = getBigDecimalSafely(rs, "RELIEF_AMOUNT"),
       reliefReason = Option(rs.getString("RELIEF_REASON")),
       reliefSchemeNumber = Option(rs.getString("RELIEF_SCHEME_NUMBER")),
       isLinked = Option(rs.getString("IS_LINKED")),
-      totalConsiderationLinked = Option(rs.getBigDecimal("TOTAL_CONSIDERATION_LINKED")).map(BigDecimal(_)),
-      totalConsideration = Option(rs.getBigDecimal("TOTAL_CONSIDERATION")).map(BigDecimal(_)),
-      considerationBuild = Option(rs.getBigDecimal("CONSIDERATION_BUILD")).map(BigDecimal(_)),
-      considerationCash = Option(rs.getBigDecimal("CONSIDERATION_CASH")).map(BigDecimal(_)),
-      considerationContingent = Option(rs.getBigDecimal("CONSIDERATION_CONTINGENT")).map(BigDecimal(_)),
-      considerationDebt = Option(rs.getBigDecimal("CONSIDERATION_DEBT")).map(BigDecimal(_)),
-      considerationEmploy = Option(rs.getBigDecimal("CONSIDERATION_EMPLOY")).map(BigDecimal(_)),
-      considerationOther = Option(rs.getBigDecimal("CONSIDERATION_OTHER")).map(BigDecimal(_)),
-      considerationLand = Option(rs.getBigDecimal("CONSIDERATION_LAND")).map(BigDecimal(_)),
-      considerationServices = Option(rs.getBigDecimal("CONSIDERATION_SERVICES")).map(BigDecimal(_)),
-      considerationSharesQTD = Option(rs.getBigDecimal("CONSIDERATION_SHARES_QTD")).map(BigDecimal(_)),
-      considerationSharesUNQTD = Option(rs.getBigDecimal("CONSIDERATION_SHARES_UNQTD")).map(BigDecimal(_)),
-      considerationVAT = Option(rs.getBigDecimal("CONSIDERATION_VAT")).map(BigDecimal(_)),
+      totalConsiderationLinked = getBigDecimalSafely(rs, "TOTAL_CONSIDERATION_LINKED"),
+      totalConsideration = getBigDecimalSafely(rs, "TOTAL_CONSIDERATION"),
+      considerationBuild = getBigDecimalSafely(rs, "CONSIDERATION_BUILD"),
+      considerationCash = getBigDecimalSafely(rs, "CONSIDERATION_CASH"),
+      considerationContingent = getBigDecimalSafely(rs, "CONSIDERATION_CONTINGENT"),
+      considerationDebt = getBigDecimalSafely(rs, "CONSIDERATION_DEBT"),
+      considerationEmploy = getBigDecimalSafely(rs, "CONSIDERATION_EMPLOY"),
+      considerationOther = getBigDecimalSafely(rs, "CONSIDERATION_OTHER"),
+      considerationLand = getBigDecimalSafely(rs, "CONSIDERATION_LAND"),
+      considerationServices = getBigDecimalSafely(rs, "CONSIDERATION_SERVICES"),
+      considerationSharesQTD = getBigDecimalSafely(rs, "CONSIDERATION_SHARES_QTD"),
+      considerationSharesUNQTD = getBigDecimalSafely(rs, "CONSIDERATION_SHARES_UNQTD"),
+      considerationVAT = getBigDecimalSafely(rs, "CONSIDERATION_VAT"),
       includesChattel = Option(rs.getString("INCLUDES_CHATTEL")),
       includesGoodwill = Option(rs.getString("INCLUDES_GOODWILL")),
       includesOther = Option(rs.getString("INCLUDES_OTHER")),
@@ -472,7 +488,7 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
       restrictionDetails = Option(rs.getString("RESTRICTION_DETAILS")),
       postTransRulingFollowed = Option(rs.getString("POST_TRANS_RULING_FOLLOWED")),
       isPartOfSaleOfBusiness = Option(rs.getString("IS_PART_OF_SALE_OF_BUSINESS")),
-      totalConsiderationBusiness = Option(rs.getBigDecimal("TOTAL_CONSIDERATION_BUSINESS")).map(BigDecimal(_))
+      totalConsiderationBusiness = getBigDecimalSafely(rs, "TOTAL_CONSIDERATION_BUSINESS")
     )
 
   private def processReturnAgent(rs: ResultSet): ReturnAgent =
@@ -661,16 +677,16 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
     try {
       cs.setString(1, p_storn)
       cs.setLong(2, p_return_resource_ref)
-      setOptionalString(cs, 3, p_title)
-      setOptionalString(cs, 4, p_forename1)
-      setOptionalString(cs, 5, p_forename2)
+      cs.setOptionalString(3, p_title)
+      cs.setOptionalString(4, p_forename1)
+      cs.setOptionalString(5, p_forename2)
       cs.setString(6, p_name)
-      setOptionalString(cs, 7, p_house_number)
+      cs.setOptionalString(7, p_house_number)
       cs.setString(8, p_address_1)
-      setOptionalString(cs, 9, p_address_2)
-      setOptionalString(cs, 10, p_address_3)
-      setOptionalString(cs, 11, p_address_4)
-      setOptionalString(cs, 12, p_postcode)
+      cs.setOptionalString(9, p_address_2)
+      cs.setOptionalString(10, p_address_3)
+      cs.setOptionalString(11, p_address_4)
+      cs.setOptionalString(12, p_postcode)
       cs.setString(13, p_is_represented_by_agent)
 
       cs.registerOutParameter(14, Types.NUMERIC)
@@ -734,19 +750,19 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
     try {
       cs.setString(1, p_storn)
       cs.setLong(2, p_return_resource_ref)
-      setOptionalString(cs, 3, p_title)
-      setOptionalString(cs, 4, p_forename1)
-      setOptionalString(cs, 5, p_forename2)
+      cs.setOptionalString(3, p_title)
+      cs.setOptionalString(4, p_forename1)
+      cs.setOptionalString(5, p_forename2)
       cs.setString(6, p_name)
-      setOptionalString(cs, 7, p_house_number)
+      cs.setOptionalString(7, p_house_number)
       cs.setString(8, p_address_1)
-      setOptionalString(cs, 9, p_address_2)
-      setOptionalString(cs, 10, p_address_3)
-      setOptionalString(cs, 11, p_address_4)
-      setOptionalString(cs, 12, p_postcode)
+      cs.setOptionalString(9, p_address_2)
+      cs.setOptionalString(10, p_address_3)
+      cs.setOptionalString(11, p_address_4)
+      cs.setOptionalString(12, p_postcode)
       cs.setString(13, p_is_represented_by_agent)
       cs.setLong(14, p_vendor_resource_ref)
-      setOptionalString(cs, 15, p_next_vendor_id)
+      cs.setOptionalString(15, p_next_vendor_id)
 
       cs.execute()
 
@@ -839,17 +855,17 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
       cs.setLong(2, p_return_resource_ref)
       cs.setString(3, p_agent_type)
       cs.setString(4, p_name)
-      setOptionalString(cs, 5, p_house_number)
+      cs.setOptionalString(5, p_house_number)
       cs.setString(6, p_address_1)
-      setOptionalString(cs, 7, p_address_2)
-      setOptionalString(cs, 8, p_address_3)
-      setOptionalString(cs, 9, p_address_4)
+      cs.setOptionalString(7, p_address_2)
+      cs.setOptionalString(8, p_address_3)
+      cs.setOptionalString(9, p_address_4)
       cs.setString(10, p_postcode)
-      setOptionalString(cs, 11, p_phone)
-      setOptionalString(cs, 12, p_email)
-      setOptionalString(cs, 13, p_dx_address)
-      setOptionalString(cs, 14, p_reference)
-      setOptionalString(cs, 15, p_is_authorised)
+      cs.setOptionalString(11, p_phone)
+      cs.setOptionalString(12, p_email)
+      cs.setOptionalString(13, p_dx_address)
+      cs.setOptionalString(14, p_reference)
+      cs.setOptionalString(15, p_is_authorised)
 
       cs.registerOutParameter(16, Types.NUMERIC)
 
@@ -913,17 +929,17 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
       cs.setLong(2, p_return_resource_ref)
       cs.setString(3, p_agent_type)
       cs.setString(4, p_name)
-      setOptionalString(cs, 5, p_house_number)
+      cs.setOptionalString(5, p_house_number)
       cs.setString(6, p_address_1)
-      setOptionalString(cs, 7, p_address_2)
-      setOptionalString(cs, 8, p_address_3)
-      setOptionalString(cs, 9, p_address_4)
+      cs.setOptionalString(7, p_address_2)
+      cs.setOptionalString(8, p_address_3)
+      cs.setOptionalString(9, p_address_4)
       cs.setString(10, p_postcode)
-      setOptionalString(cs, 11, p_phone)
-      setOptionalString(cs, 12, p_email)
-      setOptionalString(cs, 13, p_dx_address)
-      setOptionalString(cs, 14, p_reference)
-      setOptionalString(cs, 15, p_is_authorised)
+      cs.setOptionalString(11, p_phone)
+      cs.setOptionalString(12, p_email)
+      cs.setOptionalString(13, p_dx_address)
+      cs.setOptionalString(14, p_reference)
+      cs.setOptionalString(15, p_is_authorised)
       cs.execute()
 
       UpdateReturnAgentReturn(
@@ -993,6 +1009,63 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
       val newVersion = cs.getInt(3)
 
       ReturnVersionUpdateReturn(newVersion = newVersion)
+    } finally cs.close()
+  }
+
+  override def sdltUpdatePredefinedAgent(request: UpdatePredefinedAgentRequest): Future[UpdatePredefinedAgentResponse] =
+    logger.info(s"[SDLT] sdltUpdatePredefinedAgent(request=$request)")
+    Future {
+      db.withTransaction { conn =>
+        callUpdatePredefinedAgent(
+          conn = conn,
+          p_storn = request.storn,
+          p_agent_resource_ref = request.agentResourceReference.toLong,
+          p_name = request.agentName,
+          p_house_number = request.houseNumber,
+          p_address_1 = request.addressLine1,
+          p_address_2 = request.addressLine2,
+          p_address_3 = request.addressLine3,
+          p_address_4 = request.addressLine4,
+          p_postcode = request.postcode,
+          p_phone = request.phone,
+          p_email = request.email,
+          p_dx_address = request.dxAddress
+        )
+      }
+    }
+
+  private def callUpdatePredefinedAgent(
+    conn: Connection,
+    p_storn: String,
+    p_agent_resource_ref: Long,
+    p_name: String,
+    p_house_number: Option[String],
+    p_address_1: Option[String],
+    p_address_2: Option[String],
+    p_address_3: Option[String],
+    p_address_4: Option[String],
+    p_postcode: Option[String],
+    p_phone: Option[String],
+    p_email: Option[String],
+    p_dx_address: Option[String]
+  ): UpdatePredefinedAgentResponse = {
+
+    val cs = conn.prepareCall("{ call AGENT_PROCS.Update_Agent(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? ) }")
+    try {
+      cs.setString(1, p_storn)
+      cs.setLong(2, p_agent_resource_ref)
+      cs.setString(3, p_name)
+      cs.setOptionalString(4, p_house_number)
+      cs.setOptionalString(5, p_address_1)
+      cs.setOptionalString(6, p_address_2)
+      cs.setOptionalString(7, p_address_3)
+      cs.setOptionalString(8, p_address_4)
+      cs.setOptionalString(9, p_postcode)
+      cs.setOptionalString(10, p_phone)
+      cs.setOptionalString(11, p_email)
+      cs.setOptionalString(12, p_dx_address)
+      cs.execute()
+      UpdatePredefinedAgentResponse(updated = true)
     } finally cs.close()
   }
 
@@ -1066,15 +1139,15 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
     try {
       cs.setString(1, p_storn)
       cs.setString(2, p_name)
-      setOptionalString(cs, 3, p_house_number)
-      setOptionalString(cs, 4, p_address_1)
-      setOptionalString(cs, 5, p_address_2)
-      setOptionalString(cs, 6, p_address_3)
-      setOptionalString(cs, 7, p_address_4)
-      setOptionalString(cs, 8, p_postcode)
-      setOptionalString(cs, 9, p_phone)
-      setOptionalString(cs, 10, p_email)
-      setOptionalString(cs, 11, p_dx_address)
+      cs.setOptionalString(3, p_house_number)
+      cs.setOptionalString(4, p_address_1)
+      cs.setOptionalString(5, p_address_2)
+      cs.setOptionalString(6, p_address_3)
+      cs.setOptionalString(7, p_address_4)
+      cs.setOptionalString(8, p_postcode)
+      cs.setOptionalString(9, p_phone)
+      cs.setOptionalString(10, p_email)
+      cs.setOptionalString(11, p_dx_address)
 
       cs.registerOutParameter(12, Types.NUMERIC)
       cs.registerOutParameter(13, Types.NUMERIC)
@@ -1087,6 +1160,699 @@ class SdltFormpRepository @Inject() (@NamedDatabase("sdlt") db: Database)(implic
         agentResourceRef = Some(tempAgentResourceRef.toString),
         agentId = Some(tempAgentId.toString)
       )
+    } finally cs.close()
+  }
+
+  override def sdltCreatePurchaser(request: CreatePurchaserRequest): Future[CreatePurchaserReturn] = Future {
+    db.withTransaction { conn =>
+      callCreatePurchaser(
+        conn = conn,
+        p_storn = request.stornId,
+        p_return_resource_ref = request.returnResourceRef.toLong,
+        p_is_company = request.isCompany,
+        p_is_trustee = request.isTrustee,
+        p_is_connected_to_vendor = request.isConnectedToVendor,
+        p_is_represented_by_agent = request.isRepresentedByAgent,
+        p_title = request.title,
+        p_surname = request.surname,
+        p_forename1 = request.forename1,
+        p_forename2 = request.forename2,
+        p_company_name = request.companyName,
+        p_house_number = request.houseNumber,
+        p_address_1 = request.address1,
+        p_address_2 = request.address2,
+        p_address_3 = request.address3,
+        p_address_4 = request.address4,
+        p_postcode = request.postcode,
+        p_phone = request.phone,
+        p_nino = request.nino,
+        p_has_nino = request.hasNino,
+        p_date_of_birth = request.dateOfBirth,
+        p_is_uk_company = request.isUkCompany,
+        p_registration_number = request.registrationNumber,
+        p_place_of_registration = request.placeOfRegistration
+      )
+    }
+  }
+
+  private def callCreatePurchaser(
+    conn: Connection,
+    p_storn: String,
+    p_return_resource_ref: Long,
+    p_is_company: Option[String],
+    p_is_trustee: Option[String],
+    p_is_connected_to_vendor: Option[String],
+    p_is_represented_by_agent: Option[String],
+    p_title: Option[String],
+    p_surname: Option[String],
+    p_forename1: Option[String],
+    p_forename2: Option[String],
+    p_company_name: Option[String],
+    p_house_number: Option[String],
+    p_address_1: Option[String],
+    p_address_2: Option[String],
+    p_address_3: Option[String],
+    p_address_4: Option[String],
+    p_postcode: Option[String],
+    p_phone: Option[String],
+    p_nino: Option[String],
+    p_has_nino: Option[String],
+    p_date_of_birth: Option[String],
+    p_is_uk_company: Option[String],
+    p_registration_number: Option[String],
+    p_place_of_registration: Option[String]
+  ): CreatePurchaserReturn = {
+
+    val cs = conn.prepareCall(
+      "{ call PURCHASER_PROCS.Create_Purchaser(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+    )
+    try {
+      cs.setString(1, p_storn)
+      cs.setLong(2, p_return_resource_ref)
+      cs.setOptionalString(3, p_is_company)
+      cs.setOptionalString(4, p_is_trustee)
+      cs.setOptionalString(5, p_is_connected_to_vendor)
+      cs.setOptionalString(6, p_is_represented_by_agent)
+      cs.setOptionalString(7, p_title)
+      cs.setOptionalString(8, p_surname)
+      cs.setOptionalString(9, p_forename1)
+      cs.setOptionalString(10, p_forename2)
+      cs.setOptionalString(11, p_company_name)
+      cs.setOptionalString(12, p_house_number)
+      cs.setOptionalString(13, p_address_1)
+      cs.setOptionalString(14, p_address_2)
+      cs.setOptionalString(15, p_address_3)
+      cs.setOptionalString(16, p_address_4)
+      cs.setOptionalString(17, p_postcode)
+      cs.setOptionalString(18, p_phone)
+      cs.setOptionalString(19, p_nino)
+      cs.setOptionalString(20, p_has_nino)
+      cs.setOptionalString(21, p_date_of_birth)
+      cs.setOptionalString(22, p_is_uk_company)
+      cs.setOptionalString(23, p_registration_number)
+      cs.setOptionalString(24, p_place_of_registration)
+
+      cs.registerOutParameter(25, Types.NUMERIC)
+      cs.registerOutParameter(26, Types.NUMERIC)
+
+      cs.execute()
+
+      val purchaserResourceRef = cs.getLong(25)
+      val purchaserId          = cs.getLong(26)
+
+      CreatePurchaserReturn(
+        purchaserResourceRef = purchaserResourceRef.toString,
+        purchaserId = purchaserId.toString
+      )
+    } finally cs.close()
+  }
+
+  override def sdltUpdatePurchaser(request: UpdatePurchaserRequest): Future[UpdatePurchaserReturn] = Future {
+    db.withTransaction { conn =>
+      callUpdatePurchaser(
+        conn = conn,
+        p_storn = request.stornId,
+        p_return_resource_ref = request.returnResourceRef.toLong,
+        p_purchaser_resource_ref = request.purchaserResourceRef.toLong,
+        p_is_company = request.isCompany,
+        p_is_trustee = request.isTrustee,
+        p_is_connected_to_vendor = request.isConnectedToVendor,
+        p_is_represented_by_agent = request.isRepresentedByAgent,
+        p_title = request.title,
+        p_surname = request.surname,
+        p_forename1 = request.forename1,
+        p_forename2 = request.forename2,
+        p_company_name = request.companyName,
+        p_house_number = request.houseNumber,
+        p_address_1 = request.address1,
+        p_address_2 = request.address2,
+        p_address_3 = request.address3,
+        p_address_4 = request.address4,
+        p_postcode = request.postcode,
+        p_phone = request.phone,
+        p_nino = request.nino,
+        p_next_purchaser_id = request.nextPurchaserId,
+        p_has_nino = request.hasNino,
+        p_date_of_birth = request.dateOfBirth,
+        p_is_uk_company = request.isUkCompany,
+        p_registration_number = request.registrationNumber,
+        p_place_of_registration = request.placeOfRegistration
+      )
+    }
+  }
+
+  private def callUpdatePurchaser(
+    conn: Connection,
+    p_storn: String,
+    p_return_resource_ref: Long,
+    p_purchaser_resource_ref: Long,
+    p_is_company: Option[String],
+    p_is_trustee: Option[String],
+    p_is_connected_to_vendor: Option[String],
+    p_is_represented_by_agent: Option[String],
+    p_title: Option[String],
+    p_surname: Option[String],
+    p_forename1: Option[String],
+    p_forename2: Option[String],
+    p_company_name: Option[String],
+    p_house_number: Option[String],
+    p_address_1: Option[String],
+    p_address_2: Option[String],
+    p_address_3: Option[String],
+    p_address_4: Option[String],
+    p_postcode: Option[String],
+    p_phone: Option[String],
+    p_nino: Option[String],
+    p_next_purchaser_id: Option[String],
+    p_has_nino: Option[String],
+    p_date_of_birth: Option[String],
+    p_is_uk_company: Option[String],
+    p_registration_number: Option[String],
+    p_place_of_registration: Option[String]
+  ): UpdatePurchaserReturn = {
+
+    val cs = conn.prepareCall(
+      "{ call PURCHASER_PROCS.Update_Purchaser(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+    )
+    try {
+      cs.setString(1, p_storn)
+      cs.setLong(2, p_return_resource_ref)
+      cs.setLong(3, p_purchaser_resource_ref)
+      cs.setOptionalString(4, p_is_company)
+      cs.setOptionalString(5, p_is_trustee)
+      cs.setOptionalString(6, p_is_connected_to_vendor)
+      cs.setOptionalString(7, p_is_represented_by_agent)
+      cs.setOptionalString(8, p_title)
+      cs.setOptionalString(9, p_surname)
+      cs.setOptionalString(10, p_forename1)
+      cs.setOptionalString(11, p_forename2)
+      cs.setOptionalString(12, p_company_name)
+      cs.setOptionalString(13, p_house_number)
+      cs.setOptionalString(14, p_address_1)
+      cs.setOptionalString(15, p_address_2)
+      cs.setOptionalString(16, p_address_3)
+      cs.setOptionalString(17, p_address_4)
+      cs.setOptionalString(18, p_postcode)
+      cs.setOptionalString(19, p_phone)
+      cs.setOptionalString(20, p_nino)
+      cs.setOptionalString(21, p_next_purchaser_id)
+      cs.setOptionalString(22, p_has_nino)
+      cs.setOptionalString(23, p_date_of_birth)
+      cs.setOptionalString(24, p_is_uk_company)
+      cs.setOptionalString(25, p_registration_number)
+      cs.setOptionalString(26, p_place_of_registration)
+
+      cs.execute()
+
+      UpdatePurchaserReturn(
+        updated = true
+      )
+
+    } finally cs.close()
+  }
+
+  override def sdltDeletePurchaser(request: DeletePurchaserRequest): Future[DeletePurchaserReturn] = Future {
+    db.withTransaction { conn =>
+      callDeletePurchaser(
+        conn = conn,
+        p_storn = request.storn,
+        p_return_resource_ref = request.returnResourceRef.toLong,
+        p_purchaser_resource_ref = request.purchaserResourceRef.toLong
+      )
+    }
+  }
+
+  private def callDeletePurchaser(
+    conn: Connection,
+    p_storn: String,
+    p_return_resource_ref: Long,
+    p_purchaser_resource_ref: Long
+  ): DeletePurchaserReturn = {
+
+    val cs = conn.prepareCall("{ call PURCHASER_PROCS.Delete_Purchaser(?, ?, ?) }")
+    try {
+      cs.setString(1, p_storn)
+      cs.setLong(2, p_return_resource_ref)
+      cs.setLong(3, p_purchaser_resource_ref)
+
+      cs.execute()
+
+      DeletePurchaserReturn(
+        deleted = true
+      )
+    } finally cs.close()
+  }
+
+  override def sdltCreateCompanyDetails(request: CreateCompanyDetailsRequest): Future[CreateCompanyDetailsReturn] =
+    Future {
+      db.withTransaction { conn =>
+        callCreateCompanyDetails(
+          conn = conn,
+          p_storn = request.stornId,
+          p_return_resource_ref = request.returnResourceRef.toLong,
+          p_purchaser_resource_ref = request.purchaserResourceRef.toLong,
+          p_utr = request.utr,
+          p_vat_reference = request.vatReference,
+          p_comp_type_bank = request.compTypeBank,
+          p_comp_type_builder = request.compTypeBuilder,
+          p_comp_type_buildsoc = request.compTypeBuildsoc,
+          p_comp_type_centgov = request.compTypeCentgov,
+          p_comp_type_individual = request.compTypeIndividual,
+          p_comp_type_insurance = request.compTypeInsurance,
+          p_comp_type_localauth = request.compTypeLocalauth,
+          p_comp_type_ocharity = request.compTypeOcharity,
+          p_comp_type_ocompany = request.compTypeOcompany,
+          p_comp_type_ofinancial = request.compTypeOfinancial,
+          p_comp_type_partship = request.compTypePartship,
+          p_comp_type_property = request.compTypeProperty,
+          p_comp_type_publiccorp = request.compTypePubliccorp,
+          p_comp_type_soletrader = request.compTypeSoletrader,
+          p_comp_type_penfund = request.compTypePenfund
+        )
+      }
+    }
+
+  private def callCreateCompanyDetails(
+    conn: Connection,
+    p_storn: String,
+    p_return_resource_ref: Long,
+    p_purchaser_resource_ref: Long,
+    p_utr: Option[String],
+    p_vat_reference: Option[String],
+    p_comp_type_bank: Option[String],
+    p_comp_type_builder: Option[String],
+    p_comp_type_buildsoc: Option[String],
+    p_comp_type_centgov: Option[String],
+    p_comp_type_individual: Option[String],
+    p_comp_type_insurance: Option[String],
+    p_comp_type_localauth: Option[String],
+    p_comp_type_ocharity: Option[String],
+    p_comp_type_ocompany: Option[String],
+    p_comp_type_ofinancial: Option[String],
+    p_comp_type_partship: Option[String],
+    p_comp_type_property: Option[String],
+    p_comp_type_publiccorp: Option[String],
+    p_comp_type_soletrader: Option[String],
+    p_comp_type_penfund: Option[String]
+  ): CreateCompanyDetailsReturn = {
+
+    val cs = conn.prepareCall(
+      "{ call PURCHASER_PROCS.Create_Company_Details(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+    )
+    try {
+      cs.setString(1, p_storn)
+      cs.setLong(2, p_return_resource_ref)
+      cs.setLong(3, p_purchaser_resource_ref)
+      cs.setOptionalString(4, p_utr)
+      cs.setOptionalString(5, p_vat_reference)
+      cs.setOptionalString(6, p_comp_type_bank)
+      cs.setOptionalString(7, p_comp_type_builder)
+      cs.setOptionalString(8, p_comp_type_buildsoc)
+      cs.setOptionalString(9, p_comp_type_centgov)
+      cs.setOptionalString(10, p_comp_type_individual)
+      cs.setOptionalString(11, p_comp_type_insurance)
+      cs.setOptionalString(12, p_comp_type_localauth)
+      cs.setOptionalString(13, p_comp_type_ocharity)
+      cs.setOptionalString(14, p_comp_type_ocompany)
+      cs.setOptionalString(15, p_comp_type_ofinancial)
+      cs.setOptionalString(16, p_comp_type_partship)
+      cs.setOptionalString(17, p_comp_type_property)
+      cs.setOptionalString(18, p_comp_type_publiccorp)
+      cs.setOptionalString(19, p_comp_type_soletrader)
+      cs.setOptionalString(20, p_comp_type_penfund)
+
+      cs.registerOutParameter(21, Types.NUMERIC)
+
+      cs.execute()
+
+      val companyDetailsId = cs.getLong(21)
+
+      CreateCompanyDetailsReturn(
+        companyDetailsId = companyDetailsId.toString
+      )
+    } finally cs.close()
+  }
+
+  override def sdltUpdateCompanyDetails(request: UpdateCompanyDetailsRequest): Future[UpdateCompanyDetailsReturn] =
+    Future {
+      db.withTransaction { conn =>
+        callUpdateCompanyDetails(
+          conn = conn,
+          p_storn = request.stornId,
+          p_return_resource_ref = request.returnResourceRef.toLong,
+          p_purchaser_resource_ref = request.purchaserResourceRef.toLong,
+          p_utr = request.utr,
+          p_vat_reference = request.vatReference,
+          p_comp_type_bank = request.compTypeBank,
+          p_comp_type_builder = request.compTypeBuilder,
+          p_comp_type_buildsoc = request.compTypeBuildsoc,
+          p_comp_type_centgov = request.compTypeCentgov,
+          p_comp_type_individual = request.compTypeIndividual,
+          p_comp_type_insurance = request.compTypeInsurance,
+          p_comp_type_localauth = request.compTypeLocalauth,
+          p_comp_type_ocharity = request.compTypeOcharity,
+          p_comp_type_ocompany = request.compTypeOcompany,
+          p_comp_type_ofinancial = request.compTypeOfinancial,
+          p_comp_type_partship = request.compTypePartship,
+          p_comp_type_property = request.compTypeProperty,
+          p_comp_type_publiccorp = request.compTypePubliccorp,
+          p_comp_type_soletrader = request.compTypeSoletrader,
+          p_comp_type_penfund = request.compTypePenfund
+        )
+      }
+    }
+
+  private def callUpdateCompanyDetails(
+    conn: Connection,
+    p_storn: String,
+    p_return_resource_ref: Long,
+    p_purchaser_resource_ref: Long,
+    p_utr: Option[String],
+    p_vat_reference: Option[String],
+    p_comp_type_bank: Option[String],
+    p_comp_type_builder: Option[String],
+    p_comp_type_buildsoc: Option[String],
+    p_comp_type_centgov: Option[String],
+    p_comp_type_individual: Option[String],
+    p_comp_type_insurance: Option[String],
+    p_comp_type_localauth: Option[String],
+    p_comp_type_ocharity: Option[String],
+    p_comp_type_ocompany: Option[String],
+    p_comp_type_ofinancial: Option[String],
+    p_comp_type_partship: Option[String],
+    p_comp_type_property: Option[String],
+    p_comp_type_publiccorp: Option[String],
+    p_comp_type_soletrader: Option[String],
+    p_comp_type_penfund: Option[String]
+  ): UpdateCompanyDetailsReturn = {
+
+    val cs = conn.prepareCall(
+      "{ call PURCHASER_PROCS.Update_Company_Details(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+    )
+    try {
+      cs.setString(1, p_storn)
+      cs.setLong(2, p_return_resource_ref)
+      cs.setLong(3, p_purchaser_resource_ref)
+      cs.setOptionalString(4, p_utr)
+      cs.setOptionalString(5, p_vat_reference)
+      cs.setOptionalString(6, p_comp_type_bank)
+      cs.setOptionalString(7, p_comp_type_builder)
+      cs.setOptionalString(8, p_comp_type_buildsoc)
+      cs.setOptionalString(9, p_comp_type_centgov)
+      cs.setOptionalString(10, p_comp_type_individual)
+      cs.setOptionalString(11, p_comp_type_insurance)
+      cs.setOptionalString(12, p_comp_type_localauth)
+      cs.setOptionalString(13, p_comp_type_ocharity)
+      cs.setOptionalString(14, p_comp_type_ocompany)
+      cs.setOptionalString(15, p_comp_type_ofinancial)
+      cs.setOptionalString(16, p_comp_type_partship)
+      cs.setOptionalString(17, p_comp_type_property)
+      cs.setOptionalString(18, p_comp_type_publiccorp)
+      cs.setOptionalString(19, p_comp_type_soletrader)
+      cs.setOptionalString(20, p_comp_type_penfund)
+
+      cs.execute()
+
+      UpdateCompanyDetailsReturn(
+        updated = true
+      )
+
+    } finally cs.close()
+  }
+
+  override def sdltDeleteCompanyDetails(request: DeleteCompanyDetailsRequest): Future[DeleteCompanyDetailsReturn] =
+    Future {
+      db.withTransaction { conn =>
+        callDeleteCompanyDetails(
+          conn = conn,
+          p_storn = request.storn,
+          p_return_resource_ref = request.returnResourceRef.toLong
+        )
+      }
+    }
+
+  private def callDeleteCompanyDetails(
+    conn: Connection,
+    p_storn: String,
+    p_return_resource_ref: Long
+  ): DeleteCompanyDetailsReturn = {
+
+    val cs = conn.prepareCall("{ call PURCHASER_PROCS.Delete_Company_Details(?, ?) }")
+    try {
+      cs.setString(1, p_storn)
+      cs.setLong(2, p_return_resource_ref)
+
+      cs.execute()
+
+      DeleteCompanyDetailsReturn(
+        deleted = true
+      )
+    } finally cs.close()
+  }
+
+  override def sdltCreateLand(request: CreateLandRequest): Future[CreateLandReturn] = Future {
+    db.withTransaction { conn =>
+      callCreateLand(
+        conn = conn,
+        p_storn = request.stornId,
+        p_return_resource_ref = request.returnResourceRef.toLong,
+        p_property_type = request.propertyType,
+        p_interest_transferred_created = request.interestTransferredCreated,
+        p_house_number = request.houseNumber,
+        p_address_1 = request.addressLine1,
+        p_address_2 = request.addressLine2,
+        p_address_3 = request.addressLine3,
+        p_address_4 = request.addressLine4,
+        p_postcode = request.postcode,
+        p_land_area = request.landArea,
+        p_area_unit = request.areaUnit,
+        p_local_authority_number = request.localAuthorityNumber,
+        p_mineral_rights = request.mineralRights,
+        p_nlpg_uprn = request.nlpgUprn,
+        p_will_send_plans_by_post = request.willSendPlansByPost,
+        p_title_number = request.titleNumber
+      )
+    }
+  }
+
+  private def callCreateLand(
+    conn: Connection,
+    p_storn: String,
+    p_return_resource_ref: Long,
+    p_property_type: String,
+    p_interest_transferred_created: String,
+    p_house_number: Option[String],
+    p_address_1: String,
+    p_address_2: Option[String],
+    p_address_3: Option[String],
+    p_address_4: Option[String],
+    p_postcode: Option[String],
+    p_land_area: Option[String],
+    p_area_unit: Option[String],
+    p_local_authority_number: Option[String],
+    p_mineral_rights: Option[String],
+    p_nlpg_uprn: Option[String],
+    p_will_send_plans_by_post: Option[String],
+    p_title_number: Option[String]
+  ): CreateLandReturn = {
+
+    val cs = conn.prepareCall(
+      "{ call LAND_PROCS.Create_Land(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+    )
+    try {
+      cs.setString(1, p_storn)
+      cs.setLong(2, p_return_resource_ref)
+      cs.setString(3, p_property_type)
+      cs.setString(4, p_interest_transferred_created)
+      cs.setOptionalString(5, p_house_number)
+      cs.setString(6, p_address_1)
+      cs.setOptionalString(7, p_address_2)
+      cs.setOptionalString(8, p_address_3)
+      cs.setOptionalString(9, p_address_4)
+      cs.setOptionalString(10, p_postcode)
+      cs.setOptionalString(11, p_land_area)
+      cs.setOptionalString(12, p_area_unit)
+      cs.setOptionalString(13, p_local_authority_number)
+      cs.setOptionalString(14, p_mineral_rights)
+      cs.setOptionalString(15, p_nlpg_uprn)
+      cs.setOptionalString(16, p_will_send_plans_by_post)
+      cs.setOptionalString(17, p_title_number)
+
+      cs.registerOutParameter(18, Types.NUMERIC)
+      cs.registerOutParameter(19, Types.NUMERIC)
+
+      cs.execute()
+
+      val landId          = cs.getLong(18)
+      val landResourceRef = cs.getLong(19)
+
+      CreateLandReturn(
+        landResourceRef = landResourceRef.toString,
+        landId = landId.toString
+      )
+    } finally cs.close()
+  }
+
+  override def sdltUpdateLand(request: UpdateLandRequest): Future[UpdateLandReturn] = Future {
+    db.withTransaction { conn =>
+      callUpdateLand(
+        conn = conn,
+        p_storn = request.stornId,
+        p_return_resource_ref = request.returnResourceRef.toLong,
+        p_property_type = request.propertyType,
+        p_interest_transferred_created = request.interestTransferredCreated,
+        p_house_number = request.houseNumber,
+        p_address_1 = request.addressLine1,
+        p_address_2 = request.addressLine2,
+        p_address_3 = request.addressLine3,
+        p_address_4 = request.addressLine4,
+        p_postcode = request.postcode,
+        p_land_area = request.landArea,
+        p_area_unit = request.areaUnit,
+        p_local_authority_number = request.localAuthorityNumber,
+        p_mineral_rights = request.mineralRights,
+        p_nlpg_uprn = request.nlpgUprn,
+        p_will_send_plans_by_post = request.willSendPlansByPost,
+        p_title_number = request.titleNumber,
+        p_land_resource_ref = request.landResourceRef.toLong,
+        p_next_land_id = request.nextLandId
+      )
+    }
+  }
+
+  private def callUpdateLand(
+    conn: Connection,
+    p_storn: String,
+    p_return_resource_ref: Long,
+    p_property_type: String,
+    p_interest_transferred_created: String,
+    p_house_number: Option[String],
+    p_address_1: String,
+    p_address_2: Option[String],
+    p_address_3: Option[String],
+    p_address_4: Option[String],
+    p_postcode: Option[String],
+    p_land_area: Option[String],
+    p_area_unit: Option[String],
+    p_local_authority_number: Option[String],
+    p_mineral_rights: Option[String],
+    p_nlpg_uprn: Option[String],
+    p_will_send_plans_by_post: Option[String],
+    p_title_number: Option[String],
+    p_land_resource_ref: Long,
+    p_next_land_id: Option[String]
+  ): UpdateLandReturn = {
+
+    val cs = conn.prepareCall(
+      "{ call LAND_PROCS.Update_Land(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) }"
+    )
+    try {
+      cs.setString(1, p_storn)
+      cs.setLong(2, p_return_resource_ref)
+      cs.setString(3, p_property_type)
+      cs.setString(4, p_interest_transferred_created)
+      cs.setOptionalString(5, p_house_number)
+      cs.setString(6, p_address_1)
+      cs.setOptionalString(7, p_address_2)
+      cs.setOptionalString(8, p_address_3)
+      cs.setOptionalString(9, p_address_4)
+      cs.setOptionalString(10, p_postcode)
+      cs.setOptionalString(11, p_land_area)
+      cs.setOptionalString(12, p_area_unit)
+      cs.setOptionalString(13, p_local_authority_number)
+      cs.setOptionalString(14, p_mineral_rights)
+      cs.setOptionalString(15, p_nlpg_uprn)
+      cs.setOptionalString(16, p_will_send_plans_by_post)
+      cs.setOptionalString(17, p_title_number)
+      cs.setLong(18, p_land_resource_ref)
+      cs.setOptionalString(19, p_next_land_id)
+
+      cs.execute()
+
+      UpdateLandReturn(
+        updated = true
+      )
+
+    } finally cs.close()
+  }
+
+  override def sdltDeleteLand(request: DeleteLandRequest): Future[DeleteLandReturn] = Future {
+    db.withTransaction { conn =>
+      callDeleteLand(
+        conn = conn,
+        p_storn = request.storn,
+        p_return_resource_ref = request.returnResourceRef.toLong,
+        p_land_resource_ref = request.landResourceRef.toLong
+      )
+    }
+  }
+
+  private def callDeleteLand(
+    conn: Connection,
+    p_storn: String,
+    p_return_resource_ref: Long,
+    p_land_resource_ref: Long
+  ): DeleteLandReturn = {
+
+    val cs = conn.prepareCall("{ call LAND_PROCS.Delete_Land(?, ?, ?) }")
+    try {
+      cs.setString(1, p_storn)
+      cs.setLong(2, p_return_resource_ref)
+      cs.setLong(3, p_land_resource_ref)
+
+      cs.execute()
+
+      DeleteLandReturn(
+        deleted = true
+      )
+    } finally cs.close()
+  }
+
+  override def sdltUpdateReturn(request: UpdateReturnRequest): Future[UpdateReturnReturn] = Future {
+    db.withTransaction { conn =>
+      callUpdateReturn(
+        conn = conn,
+        p_storn = request.storn,
+        p_return_resource_ref = request.returnResourceRef.toLong,
+        p_main_purchaser_id = request.mainPurchaserID,
+        p_main_vendor_id = request.mainVendorID,
+        p_main_land_id = request.mainLandID,
+        p_irmark_generated = request.IRMarkGenerated,
+        p_land_cert_for_each_prop = request.landCertForEachProp,
+        p_declaration = request.declaration
+      )
+    }
+  }
+
+  private def callUpdateReturn(
+    conn: Connection,
+    p_storn: String,
+    p_return_resource_ref: Long,
+    p_main_purchaser_id: Option[String] = None,
+    p_main_vendor_id: Option[String] = None,
+    p_main_land_id: Option[String] = None,
+    p_irmark_generated: Option[String] = None,
+    p_land_cert_for_each_prop: Option[String] = None,
+    p_declaration: Option[String] = None
+  ): UpdateReturnReturn = {
+
+    val cs = conn.prepareCall("{ call RETURN_PROCS.Update_Return(?, ?, ?, ?, ?, ?, ?, ?) }")
+    try {
+      cs.setString(1, p_storn)
+      cs.setLong(2, p_return_resource_ref)
+      cs.setOptionalString(3, p_main_purchaser_id)
+      cs.setOptionalString(4, p_main_vendor_id)
+      cs.setOptionalString(5, p_main_land_id)
+      cs.setOptionalString(6, p_irmark_generated)
+      cs.setOptionalString(7, p_land_cert_for_each_prop)
+      cs.setOptionalString(8, p_declaration)
+
+      cs.execute()
+
+      UpdateReturnReturn(
+        updated = true
+      )
+
     } finally cs.close()
   }
 

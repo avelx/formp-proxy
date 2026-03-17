@@ -63,14 +63,14 @@ object OracleConnect extends App with Logging with OracleConnectBase {
     // All Returns regardless of STORN ID would be deleted
     purgeDbStep()
 
-    // insertOrgStep(stron)
+    insertOrgStep(stron)
 
-    // createInProgressReturnsStep(recNumber = 250, storn = stron)
+    // createInProgressReturnsStep(recNumber = 127, storn = stron)
 
-    // createSubmittedReturnsStep(recNumber = 127, storn = stron)
+    // createSubmittedReturnsStep(recNumber = 27, storn = stron)
 
     // TODO: <RESOLVE_POTENTIAL BUG> :: there is a potential bug in how Submitted/DueForDeletion Returns works???
-    // createDueForDeletionReturnsStep(recNumber = 3, storn = stron)
+    createDueForDeletionReturnsStep(recNumber = 3, storn = stron)
   }
 
   ////////////////////////// FUNCTION SET ////////////////////////////////////////////////

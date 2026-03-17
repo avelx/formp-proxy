@@ -17,9 +17,11 @@
 package uk.gov.hmrc.formpproxy.sdlt.services
 
 import uk.gov.hmrc.formpproxy.sdlt.models.*
-import uk.gov.hmrc.formpproxy.sdlt.models.agent.*
+import uk.gov.hmrc.formpproxy.sdlt.models.agents.*
 import uk.gov.hmrc.formpproxy.sdlt.models.returns.SdltReturnRecordResponse
 import uk.gov.hmrc.formpproxy.sdlt.models.vendor.*
+import uk.gov.hmrc.formpproxy.sdlt.models.purchaser.*
+import uk.gov.hmrc.formpproxy.sdlt.models.land.*
 import uk.gov.hmrc.formpproxy.sdlt.repositories.SdltFormpRepository
 
 import javax.inject.Inject
@@ -56,5 +58,35 @@ class ReturnService @Inject() (repo: SdltFormpRepository) {
 
   def updateReturnVersion(req: ReturnVersionUpdateRequest): Future[ReturnVersionUpdateReturn] =
     repo.sdltUpdateReturnVersion(req)
+
+  def createPurchaser(req: CreatePurchaserRequest): Future[CreatePurchaserReturn] =
+    repo.sdltCreatePurchaser(req)
+
+  def updatePurchaser(req: UpdatePurchaserRequest): Future[UpdatePurchaserReturn] =
+    repo.sdltUpdatePurchaser(req)
+
+  def deletePurchaser(req: DeletePurchaserRequest): Future[DeletePurchaserReturn] =
+    repo.sdltDeletePurchaser(req)
+
+  def createCompanyDetails(req: CreateCompanyDetailsRequest): Future[CreateCompanyDetailsReturn] =
+    repo.sdltCreateCompanyDetails(req)
+
+  def updateCompanyDetails(req: UpdateCompanyDetailsRequest): Future[UpdateCompanyDetailsReturn] =
+    repo.sdltUpdateCompanyDetails(req)
+
+  def deleteCompanyDetails(req: DeleteCompanyDetailsRequest): Future[DeleteCompanyDetailsReturn] =
+    repo.sdltDeleteCompanyDetails(req)
+
+  def createLand(req: CreateLandRequest): Future[CreateLandReturn] =
+    repo.sdltCreateLand(req)
+
+  def updateLand(req: UpdateLandRequest): Future[UpdateLandReturn] =
+    repo.sdltUpdateLand(req)
+
+  def deleteLand(req: DeleteLandRequest): Future[DeleteLandReturn] =
+    repo.sdltDeleteLand(req)
+
+  def updateReturn(request: UpdateReturnRequest): Future[UpdateReturnReturn] =
+    repo.sdltUpdateReturn(request)
 
 }

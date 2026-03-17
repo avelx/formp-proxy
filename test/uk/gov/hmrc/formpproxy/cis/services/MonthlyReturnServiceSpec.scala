@@ -20,8 +20,8 @@ import org.mockito.ArgumentMatchers.eq as eqTo
 import org.mockito.Mockito.*
 import org.scalatest.freespec.AnyFreeSpec
 import uk.gov.hmrc.formpproxy.base.SpecBase
-import uk.gov.hmrc.formpproxy.cis.models.requests.CreateNilMonthlyReturnRequest
-import uk.gov.hmrc.formpproxy.cis.models.response.CreateNilMonthlyReturnResponse
+import uk.gov.hmrc.formpproxy.cis.models.requests.*
+import uk.gov.hmrc.formpproxy.cis.models.response.*
 import uk.gov.hmrc.formpproxy.cis.models.{MonthlyReturn, UserMonthlyReturns}
 import uk.gov.hmrc.formpproxy.cis.repositories.CisMonthlyReturnSource
 
@@ -137,30 +137,134 @@ final class MonthlyReturnServiceSpec extends SpecBase {
     }
   }
 
-  "MonthlyReturnService getSchemeEmail" - {
+  "MonthlyReturnService updateNilMonthlyReturn" - {
 
-    "delegates to repo and returns Some(email)" in new Ctx {
-      when(repo.getSchemeEmail(eqTo(id))).thenReturn(Future.successful(Some("a@b.com")))
+    "delegates to repo (happy path)" in new Ctx {
+      val request = CreateNilMonthlyReturnRequest(
+        instanceId = id,
+        taxYear = 2025,
+        taxMonth = 2,
+        decInformationCorrect = "Y",
+        decNilReturnNoPayments = "Y"
+      )
 
-      service.getSchemeEmail(id).futureValue mustBe Some("a@b.com")
-      verify(repo).getSchemeEmail(eqTo(id))
+      when(repo.updateNilMonthlyReturn(eqTo(request)))
+        .thenReturn(Future.successful(()))
+
+      service.updateNilMonthlyReturn(request).futureValue mustBe ()
+
+      verify(repo).updateNilMonthlyReturn(eqTo(request))
       verifyNoMoreInteractions(repo)
     }
 
-    "delegates to repo and returns None" in new Ctx {
-      when(repo.getSchemeEmail(eqTo(id))).thenReturn(Future.successful(None))
+    "propagates failures from the repository" in new Ctx {
+      val request = CreateNilMonthlyReturnRequest(
+        instanceId = id,
+        taxYear = 2025,
+        taxMonth = 2,
+        decInformationCorrect = "Y",
+        decNilReturnNoPayments = "Y"
+      )
+      val boom    = new RuntimeException("db failed")
 
-      service.getSchemeEmail(id).futureValue mustBe None
-      verify(repo).getSchemeEmail(eqTo(id))
+      when(repo.updateNilMonthlyReturn(eqTo(request)))
+        .thenReturn(Future.failed(boom))
+
+      val ex = service.updateNilMonthlyReturn(request).failed.futureValue
+      ex mustBe boom
+
+      verify(repo).updateNilMonthlyReturn(eqTo(request))
+      verifyNoMoreInteractions(repo)
+    }
+  }
+
+  "MonthlyReturnService updateMonthlyReturnItem" - {
+
+    "delegates to repo (happy path)" in new Ctx {
+      val request = UpdateMonthlyReturnItemRequest(
+        instanceId = "1",
+        taxYear = 2015,
+        taxMonth = 5,
+        amendment = "N",
+        itemResourceReference = 999L,
+        totalPayments = "1000.00",
+        costOfMaterials = "200.00",
+        totalDeducted = "80.00",
+        subcontractorName = "ABC Ltd",
+        verificationNumber = Some("V123456")
+      )
+
+      when(repo.updateMonthlyReturnItem(eqTo(request)))
+        .thenReturn(Future.successful(()))
+
+      service.updateMonthlyReturnItem(request).futureValue mustBe ((): Unit)
+
+      verify(repo).updateMonthlyReturnItem(eqTo(request))
+      verifyNoMoreInteractions(repo)
+    }
+
+    "propagates failures from the repository" in new Ctx {
+      val request = UpdateMonthlyReturnItemRequest(
+        instanceId = "1",
+        taxYear = 2015,
+        taxMonth = 5,
+        amendment = "N",
+        itemResourceReference = 999L,
+        totalPayments = "1000.00",
+        costOfMaterials = "200.00",
+        totalDeducted = "80.00",
+        subcontractorName = "ABC Ltd",
+        verificationNumber = Some("V123456")
+      )
+
+      val boom = new RuntimeException("db failed")
+
+      when(repo.updateMonthlyReturnItem(eqTo(request)))
+        .thenReturn(Future.failed(boom))
+
+      service.updateMonthlyReturnItem(request).failed.futureValue mustBe boom
+
+      verify(repo).updateMonthlyReturnItem(eqTo(request))
+      verifyNoMoreInteractions(repo)
+    }
+  }
+
+  "MonthlyReturnService deleteMonthlyReturnItem" - {
+
+    "delegates to repo (happy path)" in new Ctx {
+      val request = DeleteMonthlyReturnItemRequest(
+        instanceId = id,
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        resourceReference = 12345L
+      )
+
+      when(repo.deleteMonthlyReturnItem(eqTo(request)))
+        .thenReturn(Future.successful(()))
+
+      service.deleteMonthlyReturnItem(request).futureValue mustBe ()
+
+      verify(repo).deleteMonthlyReturnItem(eqTo(request))
       verifyNoMoreInteractions(repo)
     }
 
     "propagates failures from repo" in new Ctx {
-      val boom = new RuntimeException("db boom")
-      when(repo.getSchemeEmail(eqTo(id))).thenReturn(Future.failed(boom))
+      val request = DeleteMonthlyReturnItemRequest(
+        instanceId = id,
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        resourceReference = 12345L
+      )
 
-      service.getSchemeEmail(id).failed.futureValue mustBe boom
-      verify(repo).getSchemeEmail(eqTo(id))
+      val boom = new RuntimeException("db failed")
+      when(repo.deleteMonthlyReturnItem(eqTo(request)))
+        .thenReturn(Future.failed(boom))
+
+      service.deleteMonthlyReturnItem(request).failed.futureValue mustBe boom
+
+      verify(repo).deleteMonthlyReturnItem(eqTo(request))
       verifyNoMoreInteractions(repo)
     }
   }

@@ -2,11 +2,36 @@
 
 # CIS routes
 POST       /monthly-returns                                         uk.gov.hmrc.formpproxy.cis.controllers.MonthlyReturnController.retrieveMonthlyReturns
-POST       /monthly-return/nil/create                               uk.gov.hmrc.formpproxy.cis.controllers.MonthlyReturnController.createNilMonthlyReturn
+POST       /cis/retrieve-unsubmitted-monthly-returns                uk.gov.hmrc.formpproxy.cis.controllers.MonthlyReturnController.retrieveUnsubmittedMonthlyReturns
+POST       /cis/monthly-return/nil/create                            uk.gov.hmrc.formpproxy.cis.controllers.MonthlyReturnController.createNilMonthlyReturn
+POST       /cis/monthly-return/nil/update                            uk.gov.hmrc.formpproxy.cis.controllers.MonthlyReturnController.updateNilMonthlyReturn
+POST       /cis/monthly-return-edit                                 uk.gov.hmrc.formpproxy.cis.controllers.MonthlyReturnController.getMonthlyReturnForEdit
+POST       /cis/monthly-return/standard/create                      uk.gov.hmrc.formpproxy.cis.controllers.MonthlyReturnController.createMonthlyReturn
+POST       /cis/monthly-return-item/sync                            uk.gov.hmrc.formpproxy.cis.controllers.MonthlyReturnController.syncMonthlyReturnItems
+POST       /cis/monthly-return-item/delete                          uk.gov.hmrc.formpproxy.cis.controllers.MonthlyReturnController.deleteMonthlyReturnItem
 POST       /scheme/email                                            uk.gov.hmrc.formpproxy.cis.controllers.MonthlyReturnController.getSchemeEmail
+GET        /scheme/:instanceId                                      uk.gov.hmrc.formpproxy.cis.controllers.ContractorSchemeController.getScheme(instanceId: String)
+POST       /scheme                                                  uk.gov.hmrc.formpproxy.cis.controllers.ContractorSchemeController.createScheme
+POST       /scheme/update                                           uk.gov.hmrc.formpproxy.cis.controllers.ContractorSchemeController.updateScheme
+POST       /scheme/version-update                                   uk.gov.hmrc.formpproxy.cis.controllers.ContractorSchemeController.updateSchemeVersion
+POST       /scheme/prepopulate                                      uk.gov.hmrc.formpproxy.cis.controllers.ContractorSchemeController.applyPrepopulation
+
+POST       /cis/monthly-return-item/update                          uk.gov.hmrc.formpproxy.cis.controllers.MonthlyReturnController.updateMonthlyReturnItem()
+
+
+
+POST       /cis/subcontractor/create-and-update                     uk.gov.hmrc.formpproxy.cis.controllers.SubcontractorController.createAndUpdateSubcontractor()
+GET        /cis/subcontractors/:cisId                               uk.gov.hmrc.formpproxy.cis.controllers.SubcontractorController.getSubcontractorList(cisId: String)
 
 POST       /submissions/create                                      uk.gov.hmrc.formpproxy.cis.controllers.SubmissionController.createSubmission()
 POST       /submissions/update                                      uk.gov.hmrc.formpproxy.cis.controllers.SubmissionController.updateSubmission()
+
+POST       /cis/govtalkstatus/get                                   uk.gov.hmrc.formpproxy.cis.controllers.GovTalkController.getGovTalkStatus
+POST       /cis/govtalkstatus/update-correlationID                  uk.gov.hmrc.formpproxy.cis.controllers.GovTalkController.updateGovTalkStatusCorrelationId
+POST       /cis/govtalkstatus/reset                                 uk.gov.hmrc.formpproxy.cis.controllers.GovTalkController.resetGovTalkStatus
+POST       /cis/govtalkstatus/update-status                         uk.gov.hmrc.formpproxy.cis.controllers.GovTalkController.updateGovTalkStatus
+POST       /cis/govtalkstatus/update-statistics                     uk.gov.hmrc.formpproxy.cis.controllers.GovTalkController.updateGovTalkStatusStatistics
+POST       /cis/govtalkstatus/create                                uk.gov.hmrc.formpproxy.cis.controllers.GovTalkController.createGovTalkStatusRecord
 
 # SDLT routes
 
@@ -15,8 +40,11 @@ POST       /retrieve-return                                         uk.gov.hmrc.
 POST       /returns                                                 uk.gov.hmrc.formpproxy.sdlt.controllers.returns.ReturnsController.getSDLTReturns()
 
 
+
+
 POST       /organisation                                            uk.gov.hmrc.formpproxy.sdlt.controllers.organisation.SdltOrganisationController.getSDLTOrganisation()
 
+POST       /update/predefined-agent                                 uk.gov.hmrc.formpproxy.sdlt.controllers.agents.UpdatePredefinedAgentController.updatePredefinedAgent()
 POST       /delete/predefined-agent                                 uk.gov.hmrc.formpproxy.sdlt.controllers.agents.DeletePredefinedAgentController.deletePredefinedAgent()
 
 POST       /filing/create/vendor                                    uk.gov.hmrc.formpproxy.sdlt.controllers.returns.VendorReturnsController.createVendor()
@@ -30,3 +58,22 @@ POST       /filing/delete/return-agent                              uk.gov.hmrc.
 POST       /filing/update/return-version                            uk.gov.hmrc.formpproxy.sdlt.controllers.returns.ReturnsController.updateReturnVersion()
 
 POST       /create/predefined-agent                                 uk.gov.hmrc.formpproxy.sdlt.controllers.agents.CreatePredefinedAgentController.createPredefinedAgent()
+
+POST       /filing/create/purchaser                                 uk.gov.hmrc.formpproxy.sdlt.controllers.returns.PurchaserReturnsController.createPurchaser()
+POST       /filing/update/purchaser                                 uk.gov.hmrc.formpproxy.sdlt.controllers.returns.PurchaserReturnsController.updatePurchaser()
+POST       /filing/delete/purchaser                                 uk.gov.hmrc.formpproxy.sdlt.controllers.returns.PurchaserReturnsController.deletePurchaser()
+
+POST       /filing/create/company-details                           uk.gov.hmrc.formpproxy.sdlt.controllers.returns.PurchaserReturnsController.createCompanyDetails()
+POST       /filing/update/company-details                           uk.gov.hmrc.formpproxy.sdlt.controllers.returns.PurchaserReturnsController.updateCompanyDetails()
+POST       /filing/delete/company-details                           uk.gov.hmrc.formpproxy.sdlt.controllers.returns.PurchaserReturnsController.deleteCompanyDetails()
+
+POST       /filing/create/land                                      uk.gov.hmrc.formpproxy.sdlt.controllers.returns.LandReturnsController.createLand()
+POST       /filing/update/land                                      uk.gov.hmrc.formpproxy.sdlt.controllers.returns.LandReturnsController.updateLand()
+POST       /filing/delete/land                                      uk.gov.hmrc.formpproxy.sdlt.controllers.returns.LandReturnsController.deleteLand()
+
+POST       /filing/update/return-info                               uk.gov.hmrc.formpproxy.sdlt.controllers.returns.ReturnsController.updateReturnInfo()
+
+# CHARITIES routes
+
+GET        /charities/:charityReference/unregulated-donations       uk.gov.hmrc.formpproxy.charities.controllers.UnregulatedDonationsController.getTotalUnregulatedDonations(charityReference: String)
+POST       /charities/:charityReference/unregulated-donations       uk.gov.hmrc.formpproxy.charities.controllers.UnregulatedDonationsController.saveUnregulatedDonation(charityReference: String)

@@ -20,7 +20,7 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatestplus.play.guice.GuiceOneServerPerSuite
-import play.api.Application
+import play.api.{Application, inject}
 import play.api.http.HeaderNames as PlayHeaders
 import play.api.inject.guice.GuiceApplicationBuilder
 import play.api.libs.json.JsValue
@@ -46,7 +46,6 @@ trait ApplicationWithWiremock
     Map[String, Any](
       "microservice.services.auth.host" -> WireMockConstants.stubHost,
       "microservice.services.auth.port" -> WireMockConstants.stubPort,
-      "feature-switch.cis-formp-stubbed" -> true
     )
   }
 
@@ -78,14 +77,16 @@ trait ApplicationWithWiremock
       HeaderNames.xSessionId -> "sessionId"
     )
 
-  protected def get(path: String): Future[HttpResponse] =
+  protected def getResponse(path: String): Future[HttpResponse] = {
+    val fullUrl = s"$baseUrl/$path"
     httpClient
-      .get(url"$baseUrl/$path")
+      .get(url"$fullUrl")
       .setHeader(commonHeaders *)
       .execute[HttpResponse]
+  }
 
-  protected def post(path: String, body: JsValue): Future[HttpResponse] = {
-    val url = s"$baseUrl/$path"
+  protected def post(uri: String, body: JsValue): Future[HttpResponse] = {
+    val url = if (uri.startsWith("/")) s"$baseUrl$uri" else s"$baseUrl/$uri"
     httpClient.post(url"$url")
       .setHeader(
         commonHeaders ++ Seq(
@@ -97,19 +98,16 @@ trait ApplicationWithWiremock
       .execute[HttpResponse]
   }
 
-  protected def postRaw(uri: String, body: JsValue): Future[HttpResponse] = {
-    val fullUrl = if (uri.startsWith("/")) s"$baseUrl$uri" else s"$baseUrl/$uri"
-    httpClient.post(new java.net.URL(fullUrl))
-      .setHeader(
-        commonHeaders ++ Seq(
-          "Accept"       -> "application/json",
-          "Content-Type" -> "application/json"
-        )*
-      )
-      .withBody(body)
-      .execute[HttpResponse]
-  }
+  protected def postAwait(uri: String, body: JsValue): HttpResponse =
+    post(uri, body).futureValue
+
+  protected def getAwait(path: String): HttpResponse =
+    getResponse(path).futureValue
 
   protected def postJson(uri: String, body: JsValue): HttpResponse =
     post(uri, body).futureValue
 }
+
+
+
+

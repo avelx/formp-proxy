@@ -27,9 +27,9 @@ import play.api.mvc.{ControllerComponents, PlayBodyParsers, Result}
 import play.api.test.FakeRequest
 import play.api.test.Helpers.*
 import uk.gov.hmrc.formpproxy.actions.{AuthAction, FakeAuthAction}
-import uk.gov.hmrc.formpproxy.cis.models.requests.{CreateNilMonthlyReturnRequest, InstanceIdRequest}
-import uk.gov.hmrc.formpproxy.cis.models.response.CreateNilMonthlyReturnResponse
-import uk.gov.hmrc.formpproxy.cis.models.{MonthlyReturn, UserMonthlyReturns, requests}
+import uk.gov.hmrc.formpproxy.cis.models.requests.*
+import uk.gov.hmrc.formpproxy.cis.models.response.*
+import uk.gov.hmrc.formpproxy.cis.models.{ContractorScheme, MonthlyReturn, UnsubmittedMonthlyReturns, UserMonthlyReturns, requests}
 import uk.gov.hmrc.formpproxy.cis.services.MonthlyReturnService
 import uk.gov.hmrc.http.UpstreamErrorResponse
 
@@ -91,8 +91,8 @@ class MonthlyReturnControllerSpec extends AnyFreeSpec with Matchers with ScalaFu
       val req = makeJsonRequest(Json.obj("instanceId" -> "abc-123"))
       val res = controller.retrieveMonthlyReturns(req)
 
-      status(res) mustBe BAD_GATEWAY
-      (contentAsJson(res) \ "message").as[String] must include("formp failed")
+      status(res) mustBe INTERNAL_SERVER_ERROR
+      (contentAsJson(res) \ "message").as[String] must include("Unexpected error")
     }
 
     "returns 500 with generic message on unexpected exception" in new Setup {
@@ -124,7 +124,7 @@ class MonthlyReturnControllerSpec extends AnyFreeSpec with Matchers with ScalaFu
 
       // Typed request body matches Action[CreateNilMonthlyReturnRequest]
       val req: FakeRequest[CreateNilMonthlyReturnRequest] =
-        FakeRequest(POST, "/formp-proxy/monthly-return/nil/create").withBody(request)
+        FakeRequest(POST, "/formp-proxy/cis/monthly-return/nil/create").withBody(request)
 
       val res: Future[Result] = controller.createNilMonthlyReturn(req)
 
@@ -150,7 +150,7 @@ class MonthlyReturnControllerSpec extends AnyFreeSpec with Matchers with ScalaFu
         .thenReturn(Future.failed(err))
 
       val req: FakeRequest[CreateNilMonthlyReturnRequest] =
-        FakeRequest(POST, "/formp-proxy/monthly-return/nil/create").withBody(request)
+        FakeRequest(POST, "/formp-proxy/cis/monthly-return/nil/create").withBody(request)
 
       val res = controller.createNilMonthlyReturn(req)
 
@@ -158,6 +158,150 @@ class MonthlyReturnControllerSpec extends AnyFreeSpec with Matchers with ScalaFu
       (contentAsJson(res) \ "message").as[String] must include("formp failed")
 
       verify(mockService).createNilMonthlyReturn(eqTo(request))
+      verifyNoMoreInteractions(mockService)
+    }
+  }
+
+  "MonthlyReturnController updateNilMonthlyReturn" - {
+
+    "returns 204 when service succeeds" in new Setup {
+      val request = CreateNilMonthlyReturnRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 2,
+        decInformationCorrect = "Y",
+        decNilReturnNoPayments = "Y"
+      )
+
+      when(mockService.updateNilMonthlyReturn(eqTo(request)))
+        .thenReturn(Future.successful(()))
+
+      val req: FakeRequest[CreateNilMonthlyReturnRequest] =
+        FakeRequest(POST, "/formp-proxy/cis/monthly-return/nil/update").withBody(request)
+
+      val res: Future[Result] = controller.updateNilMonthlyReturn(req)
+
+      status(res) mustBe NO_CONTENT
+      contentAsString(res) mustBe ""
+
+      verify(mockService).updateNilMonthlyReturn(eqTo(request))
+      verifyNoMoreInteractions(mockService)
+    }
+
+    "propagates UpstreamErrorResponse" in new Setup {
+      val request = CreateNilMonthlyReturnRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 2,
+        decInformationCorrect = "Y",
+        decNilReturnNoPayments = "Y"
+      )
+      val err     = UpstreamErrorResponse("formp failed", BAD_GATEWAY, BAD_GATEWAY)
+
+      when(mockService.updateNilMonthlyReturn(eqTo(request)))
+        .thenReturn(Future.failed(err))
+
+      val req: FakeRequest[CreateNilMonthlyReturnRequest] =
+        FakeRequest(POST, "/formp-proxy/cis/monthly-return/nil/update").withBody(request)
+
+      val res: Future[Result] = controller.updateNilMonthlyReturn(req)
+
+      status(res) mustBe BAD_GATEWAY
+      (contentAsJson(res) \ "message").as[String] must include("formp failed")
+
+      verify(mockService).updateNilMonthlyReturn(eqTo(request))
+      verifyNoMoreInteractions(mockService)
+    }
+  }
+
+  "MonthlyReturnController updateMonthlyReturnItem" - {
+
+    "returns 204 when service succeeds" in new Setup {
+      val requestBody = UpdateMonthlyReturnItemRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        itemResourceReference = 12345L,
+        totalPayments = "100.00",
+        costOfMaterials = "10.00",
+        totalDeducted = "18.00",
+        subcontractorName = "Some Subbie",
+        verificationNumber = Some("V123456")
+      )
+
+      when(mockService.updateMonthlyReturnItem(eqTo(requestBody)))
+        .thenReturn(Future.successful(()))
+
+      val req: FakeRequest[UpdateMonthlyReturnItemRequest] =
+        FakeRequest(POST, "/formp-proxy/cis/monthly-return-item/update").withBody(requestBody)
+
+      val res = controller.updateMonthlyReturnItem()(req)
+
+      status(res) mustBe NO_CONTENT
+      contentAsString(res) mustBe ""
+
+      verify(mockService).updateMonthlyReturnItem(eqTo(requestBody))
+      verifyNoMoreInteractions(mockService)
+    }
+
+    "propagates UpstreamErrorResponse (status & message)" in new Setup {
+      val requestBody = UpdateMonthlyReturnItemRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        itemResourceReference = 12345L,
+        totalPayments = "100.00",
+        costOfMaterials = "10.00",
+        totalDeducted = "18.00",
+        subcontractorName = "Some Subbie",
+        verificationNumber = Some("V123456")
+      )
+
+      val err = UpstreamErrorResponse("formp failed", BAD_GATEWAY, BAD_GATEWAY)
+
+      when(mockService.updateMonthlyReturnItem(eqTo(requestBody)))
+        .thenReturn(Future.failed(err))
+
+      val req: FakeRequest[UpdateMonthlyReturnItemRequest] =
+        FakeRequest(POST, "/formp-proxy/cis/monthly-return-item/update").withBody(requestBody)
+
+      val res = controller.updateMonthlyReturnItem()(req)
+
+      status(res) mustBe BAD_GATEWAY
+      (contentAsJson(res) \ "message").as[String] must include("formp failed")
+
+      verify(mockService).updateMonthlyReturnItem(eqTo(requestBody))
+      verifyNoMoreInteractions(mockService)
+    }
+
+    "returns 500 with generic message on unexpected exception" in new Setup {
+      val requestBody = UpdateMonthlyReturnItemRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        itemResourceReference = 12345L,
+        totalPayments = "100.00",
+        costOfMaterials = "10.00",
+        totalDeducted = "18.00",
+        subcontractorName = "Some Subbie",
+        verificationNumber = Some("V123456")
+      )
+
+      when(mockService.updateMonthlyReturnItem(eqTo(requestBody)))
+        .thenReturn(Future.failed(new RuntimeException("boom")))
+
+      val req: FakeRequest[UpdateMonthlyReturnItemRequest] =
+        FakeRequest(POST, "/formp-proxy/cis/monthly-return-item/update").withBody(requestBody)
+
+      val res = controller.updateMonthlyReturnItem()(req)
+
+      status(res) mustBe INTERNAL_SERVER_ERROR
+      (contentAsJson(res) \ "message").as[String] mustBe "Unexpected error"
+
+      verify(mockService).updateMonthlyReturnItem(eqTo(requestBody))
       verifyNoMoreInteractions(mockService)
     }
   }
@@ -201,6 +345,278 @@ class MonthlyReturnControllerSpec extends AnyFreeSpec with Matchers with ScalaFu
     }
   }
 
+  "MonthlyReturnController createMonthlyReturn" - {
+
+    "returns 201 when service succeeds" in new Setup {
+      val request = CreateMonthlyReturnRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 2
+      )
+
+      when(mockService.createMonthlyReturn(eqTo(request)))
+        .thenReturn(Future.successful(()))
+
+      val req: FakeRequest[CreateMonthlyReturnRequest] =
+        FakeRequest(POST, "/formp-proxy/monthly-return/create").withBody(request)
+
+      val res: Future[Result] = controller.createMonthlyReturn(req)
+
+      status(res) mustBe CREATED
+      contentAsString(res) mustBe ""
+
+      verify(mockService).createMonthlyReturn(eqTo(request))
+      verifyNoMoreInteractions(mockService)
+    }
+
+    "propagates UpstreamErrorResponse" in new Setup {
+      val request = CreateMonthlyReturnRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 2
+      )
+      val err     = UpstreamErrorResponse("formp failed", BAD_GATEWAY, BAD_GATEWAY)
+
+      when(mockService.createMonthlyReturn(eqTo(request)))
+        .thenReturn(Future.failed(err))
+
+      val req: FakeRequest[CreateMonthlyReturnRequest] =
+        FakeRequest(POST, "/formp-proxy/monthly-return/create").withBody(request)
+
+      val res: Future[Result] = controller.createMonthlyReturn(req)
+
+      status(res) mustBe BAD_GATEWAY
+      (contentAsJson(res) \ "message").as[String] must include("formp failed")
+
+      verify(mockService).createMonthlyReturn(eqTo(request))
+      verifyNoMoreInteractions(mockService)
+    }
+
+    "returns 500 with generic message on unexpected exception" in new Setup {
+      val request = CreateMonthlyReturnRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 2
+      )
+
+      when(mockService.createMonthlyReturn(eqTo(request)))
+        .thenReturn(Future.failed(new RuntimeException("boom")))
+
+      val req: FakeRequest[CreateMonthlyReturnRequest] =
+        FakeRequest(POST, "/formp-proxy/monthly-return/create").withBody(request)
+
+      val res: Future[Result] = controller.createMonthlyReturn(req)
+
+      status(res) mustBe INTERNAL_SERVER_ERROR
+      (contentAsJson(res) \ "message").as[String] mustBe "Unexpected error"
+
+      verify(mockService).createMonthlyReturn(eqTo(request))
+      verifyNoMoreInteractions(mockService)
+    }
+  }
+
+  "MonthlyReturnController retrieveUnsubmittedMonthlyReturns" - {
+
+    "returns 200 with payload when service succeeds" in new Setup {
+      val scheme = ContractorScheme(
+        schemeId = 1,
+        instanceId = "abc-123",
+        taxOfficeNumber = "123",
+        taxOfficeReference = "AB456",
+        accountsOfficeReference = "123PA12345678"
+      )
+
+      val payload = UnsubmittedMonthlyReturns(
+        scheme = scheme,
+        monthlyReturn = Seq(mkReturn(11111L, 1))
+      )
+
+      when(mockService.getUnsubmittedMonthlyReturns(eqTo("abc-123")))
+        .thenReturn(Future.successful(payload))
+
+      val req: FakeRequest[JsValue] =
+        FakeRequest(POST, "/formp-proxy/monthly-return")
+          .withHeaders(CONTENT_TYPE -> JSON, ACCEPT -> JSON)
+          .withBody(Json.obj("instanceId" -> "abc-123"))
+
+      val res: Future[Result] = controller.retrieveUnsubmittedMonthlyReturns(req)
+
+      status(res) mustBe OK
+      contentType(res) mustBe Some(JSON)
+      contentAsJson(res) mustBe Json.toJson(payload)
+    }
+
+    "returns 400 when JSON body is missing" in new Setup {
+      val req: FakeRequest[JsValue] =
+        FakeRequest(POST, "/formp-proxy/monthly-return")
+          .withHeaders(CONTENT_TYPE -> JSON, ACCEPT -> JSON)
+          .withBody(Json.obj())
+
+      val res: Future[Result] = controller.retrieveUnsubmittedMonthlyReturns(req)
+
+      status(res) mustBe BAD_REQUEST
+      (contentAsJson(res) \ "message").as[String] mustBe "Invalid JSON body"
+    }
+
+    "return 500 with generic message on unexpected exception" in new Setup {
+      when(mockService.getUnsubmittedMonthlyReturns(eqTo("abc-123")))
+        .thenReturn(Future.failed(new RuntimeException("boom")))
+
+      val req: FakeRequest[JsValue] =
+        FakeRequest(POST, "/formp-proxy/monthly-return")
+          .withHeaders(CONTENT_TYPE -> JSON, ACCEPT -> JSON)
+          .withBody(Json.obj("instanceId" -> "abc-123"))
+
+      val res: Future[Result] = controller.retrieveUnsubmittedMonthlyReturns(req)
+
+      status(res) mustBe INTERNAL_SERVER_ERROR
+      (contentAsJson(res) \ "message").as[String] mustBe "Unexpected error"
+    }
+  }
+
+  "getMonthlyReturnForEdit" - {
+
+    "returns 200 with json payload when service succeeds" in new Setup {
+      val requestBody = GetMonthlyReturnForEditRequest("abc-123", 2025, 1)
+
+      val payload = GetMonthlyReturnForEditResponse(
+        scheme = Seq.empty,
+        monthlyReturn = Seq.empty,
+        subcontractors = Seq.empty,
+        monthlyReturnItems = Seq.empty,
+        submission = Seq.empty
+      )
+
+      when(mockService.getMonthlyReturnForEdit(eqTo(requestBody)))
+        .thenReturn(Future.successful(payload))
+
+      val request = makeJsonRequest(Json.toJson(requestBody))
+      val result  = controller.getMonthlyReturnForEdit(request)
+
+      status(result) mustBe OK
+      contentAsJson(result) mustBe Json.toJson(payload)
+      verify(mockService).getMonthlyReturnForEdit(eqTo(requestBody))
+    }
+
+    "returns 500 with Unexpected error when service fails with NonFatal" in new Setup {
+      val requestBody = GetMonthlyReturnForEditRequest("abc-123", 2025, 1)
+
+      when(mockService.getMonthlyReturnForEdit(eqTo(requestBody)))
+        .thenReturn(Future.failed(new RuntimeException("boom")))
+
+      val request = makeJsonRequest(Json.toJson(requestBody))
+      val result  = controller.getMonthlyReturnForEdit(request)
+
+      status(result) mustBe INTERNAL_SERVER_ERROR
+      contentAsJson(result) mustBe Json.obj("message" -> "Unexpected error")
+      verify(mockService).getMonthlyReturnForEdit(eqTo(requestBody))
+    }
+  }
+
+  "MonthlyReturnController syncMonthlyReturnItems" - {
+
+    "returns 204 NoContent when service succeeds" in new Setup {
+      val requestBody = SyncMonthlyReturnItemsRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        createResourceReferences = Seq(5L, 6L),
+        deleteResourceReferences = Seq(1L, 2L)
+      )
+
+      when(mockService.syncMonthlyReturnItems(eqTo(requestBody)))
+        .thenReturn(Future.successful(()))
+
+      val req: FakeRequest[SyncMonthlyReturnItemsRequest] =
+        FakeRequest(POST, "/formp-proxy/cis/monthly-return-item/sync").withBody(requestBody)
+
+      val res: Future[Result] = controller.syncMonthlyReturnItems(req)
+
+      status(res) mustBe NO_CONTENT
+      contentAsString(res) mustBe ""
+
+      verify(mockService).syncMonthlyReturnItems(eqTo(requestBody))
+      verifyNoMoreInteractions(mockService)
+    }
+
+    "returns 500 with generic message on unexpected exception" in new Setup {
+      val requestBody = SyncMonthlyReturnItemsRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        createResourceReferences = Seq(5L),
+        deleteResourceReferences = Seq.empty
+      )
+
+      when(mockService.syncMonthlyReturnItems(eqTo(requestBody)))
+        .thenReturn(Future.failed(new RuntimeException("boom")))
+
+      val req: FakeRequest[SyncMonthlyReturnItemsRequest] =
+        FakeRequest(POST, "/formp-proxy/cis/monthly-return-item/sync").withBody(requestBody)
+
+      val res: Future[Result] = controller.syncMonthlyReturnItems(req)
+
+      status(res) mustBe INTERNAL_SERVER_ERROR
+      contentAsJson(res) mustBe Json.obj("message" -> "Unexpected error")
+
+      verify(mockService).syncMonthlyReturnItems(eqTo(requestBody))
+      verifyNoMoreInteractions(mockService)
+    }
+  }
+
+  "MonthlyReturnController deleteMonthlyReturnItem" - {
+
+    "returns 204 NoContent when service succeeds" in new Setup {
+      val requestBody = DeleteMonthlyReturnItemRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        resourceReference = 12345L
+      )
+
+      when(mockService.deleteMonthlyReturnItem(eqTo(requestBody)))
+        .thenReturn(Future.successful(()))
+
+      val req: FakeRequest[DeleteMonthlyReturnItemRequest] =
+        FakeRequest(POST, "/formp-proxy/cis/monthly-return-item/delete").withBody(requestBody)
+
+      val res: Future[Result] = controller.deleteMonthlyReturnItem(req)
+
+      status(res) mustBe NO_CONTENT
+      contentAsString(res) mustBe ""
+
+      verify(mockService).deleteMonthlyReturnItem(eqTo(requestBody))
+      verifyNoMoreInteractions(mockService)
+    }
+
+    "returns 500 with generic message on unexpected exception" in new Setup {
+      val requestBody = DeleteMonthlyReturnItemRequest(
+        instanceId = "abc-123",
+        taxYear = 2025,
+        taxMonth = 1,
+        amendment = "N",
+        resourceReference = 12345L
+      )
+
+      when(mockService.deleteMonthlyReturnItem(eqTo(requestBody)))
+        .thenReturn(Future.failed(new RuntimeException("boom")))
+
+      val req: FakeRequest[DeleteMonthlyReturnItemRequest] =
+        FakeRequest(POST, "/formp-proxy/cis/monthly-return-item/delete").withBody(requestBody)
+
+      val res: Future[Result] = controller.deleteMonthlyReturnItem(req)
+
+      status(res) mustBe INTERNAL_SERVER_ERROR
+      contentAsJson(res) mustBe Json.obj("message" -> "Unexpected error")
+
+      verify(mockService).deleteMonthlyReturnItem(eqTo(requestBody))
+      verifyNoMoreInteractions(mockService)
+    }
+  }
+
   private trait Setup {
     implicit val ec: ExecutionContext    = scala.concurrent.ExecutionContext.global
     private val cc: ControllerComponents = stubControllerComponents()
@@ -215,7 +631,7 @@ class MonthlyReturnControllerSpec extends AnyFreeSpec with Matchers with ScalaFu
         .withHeaders(CONTENT_TYPE -> JSON, ACCEPT -> JSON)
         .withBody(body)
 
-    private def mkReturn(id: Long, month: Int, year: Int = 2025): MonthlyReturn =
+    def mkReturn(id: Long, month: Int, year: Int = 2025): MonthlyReturn =
       MonthlyReturn(
         monthlyReturnId = id,
         taxYear = year,
