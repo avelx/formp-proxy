@@ -27,11 +27,13 @@ object DeleteQueries {
   // TODO: ???
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
-  val deleteOrg = DBIO
-    .seq(
-      Tables.SdltOrganisation.filter(_.storn === "STN001").delete
-    )
-    .transactionally
+  val deleteOrg = (storn : String ) => {
+    DBIO
+      .seq(
+        Tables.SdltOrganisation.filter(_.storn === storn).delete
+      )
+      .transactionally
+  }
 
   val deleteReturns = (recNumber: Int, returnType: ReturnType) =>
     DBIO

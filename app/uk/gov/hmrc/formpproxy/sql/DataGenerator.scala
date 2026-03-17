@@ -19,6 +19,9 @@ package uk.gov.hmrc.formpproxy.sql
 import scala.util.Random
 import scala.util.Try
 
+/*
+  Synthetic data generation: we would generate random data every time
+ */
 object DataGenerator {
 
   case class FullAddress(houseNumber: String, streetName: String, town: String, postCode: String)

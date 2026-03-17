@@ -163,13 +163,13 @@ object OracleConnect extends App with Logging with OracleConnectBase {
     Await.result(updateReturnMainPurchaserIdAsNullFuture, 30.seconds)
   }
 
-  def deletedRecords(recNumber: Int, returnType: ReturnType)(implicit db: profile.backend.JdbcDatabaseDef) =
+  def deletedRecords(recNumber: Int, returnType: ReturnType, storn: String)(implicit db: profile.backend.JdbcDatabaseDef) =
     returnType match {
       case InProgressReturns =>
         val combinedDeletion = deletePurchaser(recNumber, returnType) andThen
           deleteMultiLand(recNumber, returnType) andThen
           agentReturnsIdToDelete(recNumber, returnType) andThen
-          deleteReturns(recNumber, returnType) andThen deleteOrg
+          deleteReturns(recNumber, returnType) andThen deleteOrg(storn)
 
         logger.info(s"EXEC:: DeleteAll: $returnType")
         Await.result(db.run(combinedDeletion), 30.seconds)
